@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Payment Successful | Collect My Item</title>
+  <link rel="stylesheet" href="css/styles.css" />
+  <style>
+    .page { max-width: 720px; margin: 60px auto; padding: 0 16px; }
+    .card { border: 1px solid #e6e6e6; border-radius: 14px; padding: 18px; background: #fff; }
+    .ok { font-size: 22px; font-weight: 700; margin: 0 0 8px; }
+    .muted { color: #666; margin: 0 0 14px; }
+    .ref { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; background: #f5f5f5; padding: 10px 12px; border-radius: 10px; display: inline-block; }
+    .btn { display:inline-block; margin-top:14px; padding: 10px 14px; border-radius: 10px; border: 1px solid #111; text-decoration: none; }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <div class="card">
+      <p class="ok">✅ Payment received</p>
+      <p class="muted">Thanks — your booking deposit has been paid successfully.</p>
+
+      <p><strong>Booking reference:</strong></p>
+      <div class="ref" id="bookingRef">CMI-XXXXXX</div>
+
+      <p class="muted" style="margin-top:14px;">
+        We’ll contact you shortly to confirm pickup details.
+      </p>
+
+      <a class="btn" href="index.html">Back to home</a>
+    </div>
+  </main>
+
+  <script>
+    // Simple reference generator (for now)
+    const ref = "CMI-" + Math.random().toString(36).slice(2, 8).toUpperCase();
+    document.getElementById("bookingRef").textContent = ref;
+  </script>
+  <script>
+  (function () {
+    const params = new URLSearchParams(window.location.search);
+    const ref = params.get("bookingRef"); // must match server.js
+    const el = document.getElementById("bookingRef");
+    if (el) el.textContent = ref || "CMI-XXXXXX";
+  })();
+  </script>
+</body>
+</html>

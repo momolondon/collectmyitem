@@ -1,0 +1,375 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Collect My Item — London Item Delivery</title>
+  <meta name="description" content="London item delivery (single or multiple items). Instant fixed prices. Book online in minutes." />
+  <link rel="stylesheet" href="./css/styles.css" />
+</head>
+
+<body>
+  <!-- Background image + overlay -->
+  <div class="bg" aria-hidden="true"></div>
+
+  <header class="header" id="top">
+    <div class="container header__inner">
+      <a class="brand" href="#top" aria-label="Collect My Item home">
+        <span class="brand__mark" aria-hidden="true">🚐</span>
+        <span class="brand__name">Collect My Item</span>
+      </a>
+
+      <nav class="nav">
+        <!-- renamed to avoid repeating "How it works" -->
+        <a href="#how">Steps</a>
+
+        <!-- renamed to avoid repeating "Get instant price" -->
+        <a href="#quote" class="btn btn--small">Pricing</a>
+
+        <a class="btn btn--small btn--ghost" href="tel:+447404111232"> 📞</a>
+        <a class="btn btn--small btn--ghost" href="https://wa.me/447404111232" target="_blank" rel="noopener">WhatsApp</a>
+        <a class="btn btn--small btn--ghost" href="mailto:hello@collectmyitem.co.uk">Email</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <!-- HERO -->
+    <section class="hero">
+      <div class="container hero__grid">
+        <div class="hero__left">
+          <div class="pill">London Zones 1–6 • Same-day available</div>
+
+          <h1>London item delivery — instant price, book online.</h1>
+
+          <p class="lead">
+            Single or multiple items. Ideal for <strong>Facebook Marketplace</strong>, <strong>Gumtree</strong>, <strong>IKEA</strong> and <strong>eBay</strong>.
+            Fixed prices shown instantly. No bidding. No hassle.
+          </p>
+
+          <div class="hero__cta">
+            <!-- renamed to avoid repeating "Get instant price" -->
+            <a class="btn" href="#quote">Check price</a>
+
+            <!-- removed repeated "How it works" button -->
+          </div>
+
+          <div class="trust">
+            <div class="trust__item">
+              <span class="trust__icon" aria-hidden="true">💷</span>
+              <div>
+                <div class="trust__title">Instant Prices</div>
+                <div class="trust__sub">Fixed, upfront</div>
+              </div>
+            </div>
+            <div class="trust__item">
+              <span class="trust__icon" aria-hidden="true">⚡</span>
+              <div>
+                <div class="trust__title">Same-Day</div>
+                <div class="trust__sub">Fast collection</div>
+              </div>
+            </div>
+            <div class="trust__item">
+              <span class="trust__icon" aria-hidden="true">📍</span>
+              <div>
+                <div class="trust__title">London Coverage</div>
+                <div class="trust__sub">Zones 1–6</div>
+              </div>
+            </div>
+            <div class="trust__item">
+              <span class="trust__icon" aria-hidden="true">🔒</span>
+              <div>
+                <div class="trust__title">Secure Booking</div>
+                <div class="trust__sub">Confirmation screen</div>
+              </div>
+            </div>
+          </div>
+
+          <ul class="checks">
+            <li>✅ Single or multiple items</li>
+            <li>✅ Two-person lift options</li>
+            <li>✅ Booking reference instantly</li>
+          </ul>
+        </div>
+
+        <!-- QUOTE CARD -->
+        <div class="hero__right" id="quote">
+          <div class="card">
+            <div class="card__head">
+              <h2 class="card__title">Instant price (London)</h2>
+              <p class="card__subtitle"><b>ENTER DETAILS TO SEE YOUR FIXED PRICE INSTANTLY.</b>.</p>
+            </div>
+
+            <!-- QUOTE FORM -->
+            <form id="quoteForm" class="form">
+              <div class="form__row">
+                <label>
+                  Pickup postcode (London)
+                  <input name="pickup" required placeholder="e.g. SE1 2AA" />
+                </label>
+
+                <label>
+                  Delivery postcode (London)
+                  <input name="dropoff" required placeholder="e.g. E14 9AB" />
+                </label>
+              </div>
+
+              <!-- ✅ UPDATED SECTION (ITEM TYPE / SIZE / COUNT / DETAILS) -->
+              <div class="form__row">
+                <label>
+                  Item type
+                  <select name="itemType" required>
+                    <option value="" selected disabled>Select…</option>
+                    <option value="single">Single item</option>
+                    <option value="mixed">Multiple items (mixed)</option>
+                    <option value="sofa">Sofa / Armchair</option>
+                    <option value="bed">Bed / Mattress</option>
+                    <option value="wardrobe">Wardrobe / Cabinet</option>
+                    <option value="table">Table / Desk</option>
+                    <option value="appliance">Washing machine / Fridge</option>
+                    <option value="boxes">Boxes / Bags</option>
+                    <option value="bike">Bike</option>
+                    <option value="tv">TV / Electronics</option>
+                    <option value="other">Other / Not listed</option>
+                  </select>
+                </label>
+
+                <label>
+                  Approx size
+                  <select name="itemSize" required>
+                    <option value="" selected disabled>Select…</option>
+                    <option value="small">Small (1 person)</option>
+                    <option value="medium">Medium (1–2 people)</option>
+                    <option value="large">Large (2-person lift)</option>
+                    <option value="xl">XL / Heavy</option>
+                  </select>
+                </label>
+              </div>
+
+              <div class="form__row">
+                <label>
+                  Number of items
+                  <input name="itemCount" type="number" min="1" max="30" value="1" />
+                </label>
+
+                <label>
+                  Describe items (optional)
+                  <input name="itemDetails" placeholder="e.g. 2 chairs + 6 boxes + small table" />
+                </label>
+              </div>
+              <!-- ✅ END UPDATED SECTION -->
+
+              <div class="form__row">
+                <label>
+                  Stairs at pickup?
+                  <select name="stairsPickup">
+                    <option value="no">No</option>
+                    <option value="yes">Yes</option>
+                  </select>
+                </label>
+
+                <label>
+                  Stairs at delivery?
+                  <select name="stairsDropoff">
+                    <option value="no">No</option>
+                    <option value="yes">Yes</option>
+                  </select>
+                </label>
+              </div>
+
+              <div class="form__row">
+                <label>
+                  Preferred date
+                  <input type="date" name="date" />
+                </label>
+<div class="form__row">
+  <label>
+    Congestion Charge Zone?
+    <select name="congestionZone" required>
+      <option value="no" selected>No</option>
+      <option value="yes">Yes </option>
+    </select>
+  </label>
+
+  <label>
+    &nbsp;
+    <small style="display:block; margin-top:6px; color: rgba(11,18,32,.65); font-weight:700;">
+      +£18 applies only during charge hours.
+    </small>
+  </label>
+</div>
+                <label>
+                  Time window
+                  <select name="timeWindow">
+                    <option value="any">Any time</option>
+                    <option value="morning">Morning (8–12)</option>
+                    <option value="afternoon">Afternoon (12–5)</option>
+                    <option value="evening">Evening (5–9)</option>
+                  </select>
+                </label>
+              </div>
+
+              <!-- ✅ KEEP THIS as the ONLY “Get instant price” -->
+              <button type="button" id="btnGetPrice" class="btn btn--full">
+                Get instant price
+              </button>
+
+              <!-- PRICE BOX -->
+              <div id="priceBox" class="priceBox" hidden>
+                <div class="priceBox__top">
+                  <div>
+                    <div class="priceBox__label">Fixed price</div>
+                    <div class="priceBox__price" id="priceValue">£—</div>
+                    <div class="priceBox__small" id="priceNote">Includes van + driver. London only.</div>
+                  </div>
+                  <div class="priceBox__badge" id="zoneBadge">Zones —</div>
+                </div>
+
+                <div class="priceBox__breakdown" id="priceBreakdown"></div>
+
+                <button type="button" id="btnBook" class="btn btn--full">
+                  Book this price
+                </button>
+
+                <p class="fineprint">
+                  Price may change only if details are incorrect (wrong size / access).
+                </p>
+              </div>
+            </form>
+
+            <!-- BOOKING FORM -->
+            <form id="bookingForm" class="form" hidden>
+              <h3 class="h3">Booking details</h3>
+
+              <div class="form__row">
+                <label>
+                  Full name
+                  <input name="name" required placeholder="e.g. Mo" />
+                </label>
+                <label>
+                  Mobile number
+                  <input name="phone" required placeholder="e.g. 07..." />
+                </label>
+              </div>
+
+              <div class="form__row">
+                <label>
+                  Email (optional)
+                  <input name="email" type="email" placeholder="e.g. you@email.com" />
+                </label>
+                <label>
+                  Item notes (optional)
+                  <input name="notes" placeholder="e.g. measurements, parking info" />
+                </label>
+              </div>
+
+              <button type="submit" class="btn btn--full">Confirm booking</button>
+              <button type="button" id="btnBack" class="btn btn--ghost btn--full">Back</button>
+            </form>
+
+            <!-- CONFIRMATION -->
+            <div id="confirmBox" class="confirmBox" hidden>
+              <h3>Booking received ✅</h3>
+              <p class="muted">Your booking reference:</p>
+              <div class="ref" id="bookingRef">CMI-XXXXXX</div>
+              <p class="muted" id="confirmText"></p>
+              <button type="button" id="btnNewQuote" class="btn btn--full">New quote</button>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- HOW IT WORKS (ONLY ONE) -->
+    <section id="how" class="section section--light">
+      <div class="container">
+        <div class="section__head">
+          <h2>How it works</h2>
+          <p class="muted">3 simple steps — price, book, delivered.</p>
+        </div>
+
+        <div class="steps">
+          <div class="step">
+            <div class="step__num">1</div>
+            <h3>Get a fixed quote</h3>
+            <p>Enter London postcodes + item size. Your fixed price shows instantly.</p>
+          </div>
+          <div class="step">
+            <div class="step__num">2</div>
+            <h3>Book online</h3>
+            <p>Confirm details and get a booking reference on-screen.</p>
+          </div>
+          <div class="step">
+            <div class="step__num">3</div>
+            <h3>Driver collects & delivers</h3>
+            <p>One company (us). We arrange pickup and deliver to your door.</p>
+          </div>
+        </div>
+
+        <!-- CTA STRIP: keep it, but rename the button to avoid repeating the phrase -->
+        <div class="ctaStrip">
+          <div>
+            <h3 class="ctaStrip__title">Ready to see your quote?</h3>
+            <p class="ctaStrip__sub">It takes less than a minute.</p>
+          </div>
+          <a class="btn" href="#quote">Check price</a>
+        </div>
+      </div>
+    </section>
+
+    <!-- CONTACT -->
+    <section id="contact" class="section section--light">
+      <div class="container">
+        <div class="section__head">
+          <h2>Contact</h2>
+          <p class="muted">Fast response. Call or WhatsApp for quick questions</p>
+        </div>
+
+        <div class="contactGrid">
+          <div class="contactCard">
+            <div class="contactIcon">📞</div>
+            <div>
+              <a class="contactLink" href="tel:+447404111232">Call</a>
+              <div class="contactSub">Mon–Sun • 8am–9pm</div>
+            </div>
+          </div>
+
+          <div class="contactCard">
+            <div class="contactIcon">💬</div>
+            <div>
+              <a class="contactLink" href="https://wa.me/447404111232" target="_blank" rel="noopener">WhatsApp</a>
+              <div class="contactSub">Quick replies</div>
+            </div>
+          </div>
+
+          <div class="contactCard">
+            <div class="contactIcon">✉️</div>
+            <div>
+              <a class="contactLink" href="mailto:hello@collectmyitem.co.uk">hello@collectmyitem.co.uk</a>
+              <div class="contactSub">We usually reply same day</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <div class="container footer__inner">
+        <p>© <span id="year"></span> Collect My Item. London only.</p>
+        <p class="muted">Support: Mon–Sun</p>
+      </div>
+    </footer>
+  </main>
+
+  <script src="./js/app.js" defer></script>
+  
+
+</body>
+</html>
+
+
+
+
+
+

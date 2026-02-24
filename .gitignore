@@ -1,0 +1,7 @@
+node_modules/
+.env
+bookings.json
+*.exe
+*.zip
+stripe*/
+.DS_Store
