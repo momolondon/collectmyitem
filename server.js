@@ -14,7 +14,15 @@ const BOOKINGS_FILE = path.join(__dirname, "bookings.json");
 const PUBLIC_DIR = path.join(__dirname, "public");
 const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
 
-// ✅ Stripe webhook MUST be raw and MUST come before express.json()
+// Pricing constants
+const PER_MILE_RATE = 2; // £ per mile
+const MIN_DEPOSIT = 25; // £
+const CONGESTION_FEE = 18; // £ flat
+
+// ------------------------------
+// Webhook MUST be raw and BEFORE express.json
+// ------------------------------
+
 app.post("/webhook", express.raw({ type: "application/json" }), (req, res) => {
   const sig = req.headers["stripe-signature"];
   const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
@@ -31,214 +39,418 @@ app.post("/webhook", express.raw({ type: "application/json" }), (req, res) => {
     const session = event.data.object;
     const bookingRef = session.metadata?.bookingRef;
 
-    console.log("✅ Payment confirmed for:", bookingRef);
+    console.log("✅ Deposit payment confirmed for:", bookingRef);
 
-    const bookings = fs.existsSync(BOOKINGS_FILE)
-      ? JSON.parse(fs.readFileSync(BOOKINGS_FILE, "utf8"))
-      : [];
-
-    const booking = bookings.find((b) => b.bookingRef === bookingRef);
-    if (booking) {
-      booking.status = "paid";
-      booking.paidAt = new Date().toISOString();
-      fs.writeFileSync(BOOKINGS_FILE, JSON.stringify(bookings, null, 2));
+    if (bookingRef) {
+      const bookings = readBookings();
+      const booking = bookings.find((b) => b.bookingRef === bookingRef);
+      if (booking) {
+        booking.status = "paid_deposit";
+        booking.depositPaidAt = new Date().toISOString();
+        writeBookings(bookings);
+      }
     }
   }
 
   res.json({ received: true });
 });
 
-// ✅ normal middleware AFTER webhook
+// ------------------------------
+// Normal middleware AFTER webhook
+// ------------------------------
+
 app.use(cors());
 app.use(express.json());
 
-// ✅ Serve your website files from /public (CSS/JS/images will work)
+// Serve static frontend
 app.use(express.static(PUBLIC_DIR));
 
-// ✅ Homepage
 app.get("/", (req, res) => {
   res.sendFile(path.join(PUBLIC_DIR, "index.html"));
 });
 
-// Helper: save booking if not exists
-function upsertBooking(data) {
-  const bookings = fs.existsSync(BOOKINGS_FILE)
-    ? JSON.parse(fs.readFileSync(BOOKINGS_FILE, "utf8"))
-    : [];
+// ------------------------------
+// Booking file helpers
+// ------------------------------
 
+function readBookings() {
+  if (!fs.existsSync(BOOKINGS_FILE)) return [];
+  try {
+    const raw = fs.readFileSync(BOOKINGS_FILE, "utf8");
+    if (!raw) return [];
+    return JSON.parse(raw);
+  } catch (err) {
+    console.error("Failed to read bookings.json", err);
+    return [];
+  }
+}
+
+function writeBookings(bookings) {
+  fs.writeFileSync(BOOKINGS_FILE, JSON.stringify(bookings, null, 2));
+}
+
+function upsertBooking(data) {
+  const bookings = readBookings();
   let booking = bookings.find((b) => b.bookingRef === data.bookingRef);
+  const now = new Date().toISOString();
 
   if (!booking) {
     booking = {
       ...data,
-      status: "pending",
-      createdAt: new Date().toISOString(),
+      status: data.status || "pending_deposit",
+      createdAt: now,
+      updatedAt: now,
     };
     bookings.push(booking);
   } else {
-    Object.assign(booking, data);
+    Object.assign(booking, data, { updatedAt: now });
   }
 
-  fs.writeFileSync(BOOKINGS_FILE, JSON.stringify(bookings, null, 2));
+  writeBookings(bookings);
+  return booking;
 }
 
+// ------------------------------
+// Validation & pricing helpers
+// ------------------------------
 
-function calculatePriceServer(data) {
+function cleanPostcode(pc) {
+  return String(pc || "")
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, "");
+}
 
-  const baseBySize = {
-    small: 35,
-    medium: 55,
-    large: 75,
-    xl: 95
+function isValidPostcode(pc) {
+  const s = cleanPostcode(pc);
+  // Basic UK postcode pattern (good enough for validation here)
+  return /^[A-Z]{1,2}\d[A-Z0-9]?\d[A-Z]{2}$/.test(s);
+}
+
+function isInCongestionZone(pc) {
+  const s = cleanPostcode(pc);
+  if (!s) return false;
+  // Very simple approximation of central London congestion zone prefixes
+  return (
+    s.startsWith("EC1") ||
+    s.startsWith("EC2") ||
+    s.startsWith("EC3") ||
+    s.startsWith("EC4") ||
+    s.startsWith("WC1") ||
+    s.startsWith("WC2") ||
+    s.startsWith("W1") ||
+    s.startsWith("SW1") ||
+    s.startsWith("SE1") ||
+    s.startsWith("E1") ||
+    s.startsWith("N1")
+  );
+}
+
+function toDistanceLocation(postcode, coords) {
+  const hasCoords =
+    coords &&
+    typeof coords.lat === "number" &&
+    Number.isFinite(coords.lat) &&
+    typeof coords.lng === "number" &&
+    Number.isFinite(coords.lng);
+
+  if (hasCoords) {
+    return `${coords.lat},${coords.lng}`;
+  }
+
+  const cleaned = cleanPostcode(postcode);
+  return cleaned;
+}
+
+async function calculateDistanceMiles(
+  pickupPostcode,
+  dropoffPostcode,
+  pickupCoords,
+  dropoffCoords
+) {
+  const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+  if (!apiKey) {
+    // No key configured – fall back to minimum-distance pricing only
+    return 0;
+  }
+
+  const origin = toDistanceLocation(pickupPostcode, pickupCoords);
+  const dest = toDistanceLocation(dropoffPostcode, dropoffCoords);
+
+  if (!origin || !dest) return 0;
+
+  const params = new URLSearchParams({
+    units: "imperial",
+    origins: origin,
+    destinations: dest,
+    key: apiKey,
+  });
+
+  const url = `https://maps.googleapis.com/maps/api/distancematrix/json?${params.toString()}`;
+
+  const resp = await fetch(url);
+  if (!resp.ok) {
+    throw new Error(`Distance API HTTP ${resp.status}`);
+  }
+
+  const data = await resp.json();
+  const element = data?.rows?.[0]?.elements?.[0];
+
+  if (!element || element.status !== "OK" || !element.distance) {
+    throw new Error(`Distance API element status: ${element?.status}`);
+  }
+
+  const miles = element.distance.value / 1609.344;
+  if (!Number.isFinite(miles) || miles < 0) return 0;
+
+  // One decimal place is enough
+  return Math.round(miles * 10) / 10;
+}
+
+async function calculatePricing(rawBody) {
+  const body = rawBody || {};
+
+  const pickup = cleanPostcode(body.pickup);
+  const dropoff = cleanPostcode(body.dropoff);
+  const serviceType = body.serviceType;
+  const houseSize = body.houseSize;
+
+  if (!pickup || !dropoff) {
+    throw new Error("Pickup and delivery postcodes are required.");
+  }
+  if (!isValidPostcode(pickup) || !isValidPostcode(dropoff)) {
+    throw new Error("Please enter valid UK postcodes for pickup and delivery.");
+  }
+
+  if (!serviceType || !["man_van", "house_removal"].includes(serviceType)) {
+    throw new Error("Invalid service type. Please choose Man & Van or House Removal.");
+  }
+
+  const houseRemovalBaseBySize = {
+    studio: 200,
+    "1_bed": 250,
+    "2_bed": 350,
+    "3_bed": 500,
+    "4_bed": 700,
   };
 
-  const base = baseBySize[data.itemSize] || 55;
+  let base = 0;
+  let minTotal = 0;
+  let serviceLabel = "";
 
-  let stairs = 0;
-
-  if (data.stairsPickup === "yes") stairs += 10;
-  if (data.stairsDropoff === "yes") stairs += 10;
-
-  let congestion = 0;
-
-  if (data.date && data.timeWindow) {
-
-    const d = new Date(data.date);
-    const day = d.getDay();
-
-    if (day >= 1 && day <= 5) {
-
-      if (
-        data.timeWindow === "morning" ||
-        data.timeWindow === "afternoon"
-      ) congestion = 18;
-
-    } else {
-
-      if (data.timeWindow === "afternoon")
-        congestion = 18;
-
+  if (serviceType === "man_van") {
+    base = 60; // £60 base
+    minTotal = 90; // minimum total
+    serviceLabel = "Man & Van";
+  } else {
+    if (!houseSize || !houseRemovalBaseBySize[houseSize]) {
+      throw new Error("Please select a valid property size for house removal.");
     }
-
+    base = houseRemovalBaseBySize[houseSize];
+    minTotal = 250;
+    serviceLabel = "House Removal";
   }
 
-  return base + stairs + congestion;
-}
+  const pickupLat = Number(body.pickupLat);
+  const pickupLng = Number(body.pickupLng);
+  const dropoffLat = Number(body.dropoffLat);
+  const dropoffLng = Number(body.dropoffLng);
 
-// ✅ Stripe Checkout (supports both /create-checkout-session and /api/create-checkout-session)
+  const pickupCoords =
+    Number.isFinite(pickupLat) && Number.isFinite(pickupLng)
+      ? { lat: pickupLat, lng: pickupLng }
+      : null;
+  const dropoffCoords =
+    Number.isFinite(dropoffLat) && Number.isFinite(dropoffLng)
+      ? { lat: dropoffLat, lng: dropoffLng }
+      : null;
 
-// ------------------------------
-// Pricing helpers (SERVER-SIDE)
-// ------------------------------
-// ---------- Pricing helpers (SERVER) ----------
-function clampNumber(v, min, max, fallback) {
-  const n = Number(v);
-  if (!Number.isFinite(n)) return fallback;
-  return Math.min(max, Math.max(min, n));
-}
-
-function timeWindowToRange(timeWindow) {
-  switch (timeWindow) {
-    case "morning": return [8 * 60, 12 * 60];
-    case "afternoon": return [12 * 60, 17 * 60];
-    case "evening": return [17 * 60, 21 * 60];
-    case "any":
-    default: return [0, 24 * 60];
-  }
-}
-
-function rangesOverlap(aStart, aEnd, bStart, bEnd) {
-  return Math.max(aStart, bStart) < Math.min(aEnd, bEnd);
-}
-
-function congestionChargeApplies(dateStr, timeWindow) {
-  if (!dateStr) return false;
-  const d = new Date(dateStr + "T00:00:00");
-  const day = d.getDay(); // 0 Sun ... 6 Sat
-  const [winStart, winEnd] = timeWindowToRange(timeWindow || "any");
-
-  // Mon–Fri 07:00–18:00
-  if (day >= 1 && day <= 5) return rangesOverlap(winStart, winEnd, 7 * 60, 18 * 60);
-  // Sat–Sun 12:00–18:00
-  if (day === 0 || day === 6) return rangesOverlap(winStart, winEnd, 12 * 60, 18 * 60);
-
-  return false;
-}
-
-function calculatePriceServer(body) {
-  const baseBySize = { small: 35, medium: 55, large: 75, xl: 95 };
-  const size = body.itemSize || "medium";
-  const base = baseBySize[size] ?? 55;
-
-  const count = clampNumber(body.itemCount, 1, 30, 1);
-  const perExtraBySize = { small: 6, medium: 8, large: 10, xl: 12 };
-  const perExtra = perExtraBySize[size] ?? 8;
-  const extraItemsAdd = (count - 1) * perExtra;
-
-  // Optional type add-ons if you still use itemType
-  const itemType = body.itemType || "";
-  const mixedAdd = itemType === "mixed" ? 10 : 0;
-  const boxesAdd = itemType === "boxes" ? 5 : 0;
-  const otherAdd = itemType === "other" ? 5 : 0;
-
-  const stairsAdd =
-    (body.stairsPickup === "yes" ? 10 : 0) +
-    (body.stairsDropoff === "yes" ? 10 : 0);
-
-  // Simple travel (keep your existing logic if you want)
-  const zoneAdd = 15; // example fixed travel, or replace with your zone logic
-
-  // ✅ Congestion: ONLY if user chose "yes" AND it applies by time/day
-  const congestionAdd =
-    body.congestionZone === "yes" && congestionChargeApplies(body.date, body.timeWindow)
-      ? 18
-      : 0;
-
-  const total = Math.max(
-    30,
-    base + extraItemsAdd + mixedAdd + boxesAdd + otherAdd + stairsAdd + zoneAdd + congestionAdd
-  );
-
-  return Math.round(total / 5) * 5;
-}
-
-// ---------- Price endpoint (SERVER) ----------
-app.post("/api/price", (req, res) => {
+  let miles = 0;
   try {
-    const price = calculatePriceServer(req.body || {});
-    res.json({ price });
+    miles = await calculateDistanceMiles(pickup, dropoff, pickupCoords, dropoffCoords);
+  } catch (err) {
+    console.error("Distance calculation failed, using 0 miles:", err.message);
+    miles = 0;
+  }
+
+  const distanceCharge = PER_MILE_RATE * miles;
+
+  const congestionApplied =
+    isInCongestionZone(pickup) || isInCongestionZone(dropoff);
+  const congestionFee = congestionApplied ? CONGESTION_FEE : 0;
+
+  let total = base + distanceCharge + congestionFee;
+  if (!Number.isFinite(total)) {
+    throw new Error("Calculated total is invalid.");
+  }
+
+  // Minimum totals for each service type
+  total = Math.max(minTotal, Math.round(total));
+
+  let deposit = total * 0.25;
+  if (!Number.isFinite(deposit)) {
+    throw new Error("Calculated deposit is invalid.");
+  }
+  deposit = Math.max(MIN_DEPOSIT, deposit);
+  deposit = Math.round(deposit);
+
+  const remaining = total - deposit;
+
+  const breakdown = [
+    `Service — ${serviceLabel}`,
+    `Base — £${base.toFixed(0)}`,
+    `Distance — £${Math.round(distanceCharge)} (${miles.toFixed(
+      1
+    )} miles @ £${PER_MILE_RATE}/mile)`,
+    congestionApplied ? `Congestion Charge — £${CONGESTION_FEE}` : null,
+    `Total — £${total.toFixed(0)}`,
+    `Deposit today (25%) — £${deposit.toFixed(0)}`,
+    `Remaining balance — £${remaining.toFixed(0)}`,
+  ].filter(Boolean);
+
+  return {
+    total,
+    deposit,
+    remaining,
+    miles: Math.round(miles * 10) / 10,
+    distanceCharge: Math.round(distanceCharge),
+    base,
+    perMile: PER_MILE_RATE,
+    congestionApplied,
+    congestionFee,
+    serviceType,
+    serviceLabel,
+    breakdown,
+    note:
+      "You pay only the deposit now. Remaining balance is paid directly to the driver on the day.",
+  };
+}
+
+// ------------------------------
+// Price endpoint
+// ------------------------------
+
+app.post("/api/price", async (req, res) => {
+  try {
+    const pricing = await calculatePricing(req.body || {});
+    res.json(pricing);
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    const status = /required|invalid|Please/.test(e.message) ? 400 : 500;
+    res.status(status).json({ error: e.message });
   }
 });
 
-// ---------- Stripe checkout session (SERVER) ----------
+// ------------------------------
+// Stripe checkout session (deposit only)
+// ------------------------------
 
 async function handleCheckout(req, res) {
-
   try {
-
     const body = req.body || {};
 
-    // ✅ Calculate price safely from body
-    const calculatedTotal = calculatePriceServer(body);
+    const pickup = cleanPostcode(body.pickup);
+    const dropoff = cleanPostcode(body.dropoff);
 
-    const amountPence = Math.round(calculatedTotal * 100);
-
-    if (!amountPence || amountPence < 50) {
-      return res.status(400).json({ error: "Invalid amount" });
+    if (!pickup || !dropoff) {
+      return res
+        .status(400)
+        .json({ error: "Pickup and delivery postcodes are required." });
+    }
+    if (!isValidPostcode(pickup) || !isValidPostcode(dropoff)) {
+      return res
+        .status(400)
+        .json({ error: "Please enter valid UK postcodes for pickup and delivery." });
     }
 
-    const bookingRef =
-      body.bookingRef ||
-      `CMI-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+    if (!body.serviceType || !["man_van", "house_removal"].includes(body.serviceType)) {
+      return res
+        .status(400)
+        .json({ error: "Invalid service type. Please choose Man & Van or House Removal." });
+    }
+
+    if (body.serviceType === "house_removal" && !body.houseSize) {
+      return res
+        .status(400)
+        .json({ error: "Please select a valid property size for house removal." });
+    }
+
+    if (!body.name || !body.phone) {
+      return res
+        .status(400)
+        .json({ error: "Name and mobile number are required to book." });
+    }
+
+    // Idempotency / duplicate booking protection
+    const allBookings = readBookings();
+    let bookingRef = body.bookingRef;
+    let existingBooking = null;
+
+    if (bookingRef) {
+      existingBooking = allBookings.find((b) => b.bookingRef === bookingRef);
+      if (existingBooking) {
+        if (existingBooking.status === "paid_deposit") {
+          return res
+            .status(400)
+            .json({ error: "Deposit has already been paid for this booking." });
+        }
+        if (existingBooking.stripeSessionId && existingBooking.stripeSessionUrl) {
+          // Re-use existing Stripe session instead of creating duplicates
+          return res.json({
+            url: existingBooking.stripeSessionUrl,
+            bookingRef: existingBooking.bookingRef,
+          });
+        }
+      }
+    }
+
+    // Generate a fresh booking reference if one was not supplied or did not exist
+    if (!bookingRef) {
+      do {
+        bookingRef = `CMI-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+      } while (allBookings.some((b) => b.bookingRef === bookingRef));
+    }
+
+    const pricing = await calculatePricing({
+      pickup,
+      dropoff,
+      serviceType: body.serviceType,
+      houseSize: body.houseSize,
+      pickupLat: body.pickupLat,
+      pickupLng: body.pickupLng,
+      dropoffLat: body.dropoffLat,
+      dropoffLng: body.dropoffLng,
+    });
+
+    const amountPence = Math.round(pricing.deposit * 100);
+    if (!amountPence || amountPence < MIN_DEPOSIT * 100) {
+      return res.status(400).json({ error: "Invalid deposit amount." });
+    }
+
+    // Persist booking (total, deposit, remaining, etc.)
+    upsertBooking({
+      bookingRef,
+      pickup,
+      dropoff,
+      serviceType: body.serviceType,
+      houseSize: body.houseSize || "",
+      stairsPickup: body.stairsPickup || "no",
+      stairsDropoff: body.stairsDropoff || "no",
+      date: body.date || "",
+      timeWindow: body.timeWindow || "any",
+      name: body.name,
+      phone: body.phone,
+      email: body.email || "",
+      notes: body.notes || "",
+      total: pricing.total,
+      deposit: pricing.deposit,
+      remaining: pricing.remaining,
+      miles: pricing.miles,
+      status: "pending_deposit",
+    });
 
     const session = await stripe.checkout.sessions.create({
-
       mode: "payment",
-
       payment_method_types: ["card"],
-
       line_items: [
         {
           price_data: {
@@ -251,39 +463,54 @@ async function handleCheckout(req, res) {
           quantity: 1,
         },
       ],
-
       metadata: {
         bookingRef,
       },
-
       success_url: `${BASE_URL}/success.html`,
       cancel_url: `${BASE_URL}/cancel.html`,
+    });
 
+    // Store Stripe session info to prevent duplicate sessions for the same bookingRef
+    upsertBooking({
+      bookingRef,
+      stripeSessionId: session.id,
+      stripeSessionUrl: session.url,
     });
 
     res.json({
       url: session.url,
       bookingRef,
     });
-
-  }
-
-  catch (err) {
-
-    console.log("Stripe error:", err);
-
+  } catch (err) {
+    console.log("Stripe / checkout error:", err);
     res.status(500).json({
-      error: err.message,
+      error: err.message || "Unexpected error creating checkout session.",
     });
-
   }
-
 }
 
 app.post("/create-checkout-session", handleCheckout);
 app.post("/api/create-checkout-session", handleCheckout);
 
-// ✅ yes, keep listen at the bottom
+// ------------------------------
+// Google Maps config for frontend (Places + Distance Matrix)
+// ------------------------------
+
+app.get("/api/maps-config", (req, res) => {
+  const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+  if (!apiKey) {
+    return res
+      .status(500)
+      .json({ error: "Google Maps API key is not configured on the server." });
+  }
+  res.json({ apiKey });
+});
+
+// ------------------------------
+// Start server
+// ------------------------------
+
 app.listen(PORT, () => {
   console.log(`✅ Server running on http://localhost:${PORT}`);
 });
+
