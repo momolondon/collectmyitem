@@ -290,7 +290,7 @@ function handlePlaceChangedClassic(autocomplete, kind) {
   }
 
   if (!postcode) {
-    alert("Please select a valid UK address from the dropdown.");
+    alert("Please enter a valid UK address or postcode.");
   }
 }
 
@@ -410,6 +410,25 @@ function cleanPostcode(pc) {
     .replace(/\s+/g, "");
 }
 
+/** Extract first UK postcode from a string (e.g. "123 High St, London SE6 2BG" -> "SE6 2BG") */
+function extractUkPostcode(text) {
+  if (!text || typeof text !== "string") return "";
+  const match = text
+    .toUpperCase()
+    .trim()
+    .match(/\b([A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2})\b/);
+  return match ? match[1].replace(/\s+/, " ").trim() : "";
+}
+
+/** Normalize to display format "SE6 2BG" (outward + space + inward) */
+function normalizePostcodeToDisplay(pc) {
+  const s = cleanPostcode(pc);
+  if (!s || !isLikelyValidPostcode(s)) return "";
+  const inward = s.slice(-3);
+  const outward = s.slice(0, -3);
+  return `${outward} ${inward}`;
+}
+
 function isLikelyValidPostcode(pc) {
   const s = cleanPostcode(pc);
   // Simple UK postcode check (basic, not exhaustive)
@@ -455,6 +474,23 @@ function isWithinServiceArea(pc) {
   ]);
 
   return allowedAreas.has(area);
+}
+
+/**
+ * Resolve a single postcode from hidden field or by extracting from visible address input.
+ * Returns normalized "SE6 2BG" format or "" if none found or format invalid (service area checked by caller).
+ */
+function resolvePostcodeFromInputs(hiddenVal, visibleInputVal) {
+  const fromHidden = (hiddenVal ?? "").toString().trim();
+  let raw = "";
+  if (fromHidden && isLikelyValidPostcode(fromHidden)) {
+    raw = fromHidden;
+  } else {
+    raw = extractUkPostcode((visibleInputVal ?? "").toString());
+  }
+  if (!raw) return "";
+  const normalized = normalizePostcodeToDisplay(raw);
+  return normalized && isLikelyValidPostcode(normalized) ? normalized : "";
 }
 
 // ==========================
@@ -541,7 +577,7 @@ function buildValidatedQuotePayload() {
   const payload = getQuotePayload();
 
   if (!payload.pickup || !payload.dropoff) {
-    alert("Please enter valid UK pickup and delivery postcodes.");
+    alert("Please enter valid UK pickup and delivery postcodes (e.g. SE6 2BG).");
     return null;
   }
 
@@ -588,6 +624,53 @@ serviceTypeSelect?.addEventListener("change", () => {
 
 btnGetPrice?.addEventListener("click", async () => {
   if (currentPage === "step1") {
+    // Before validation: when user typed only a postcode (no dropdown), derive and set hidden fields
+    const pickupVisible = (pickupAddressInput?.value ?? "").toString().trim();
+    const dropoffVisible = (dropoffAddressInput?.value ?? "").toString().trim();
+    const pickupHiddenEmpty = !(pickupPostcodeHidden?.value || pickupPostcodeAltHidden?.value);
+    const dropoffHiddenEmpty = !(dropoffPostcodeHidden?.value || dropoffPostcodeAltHidden?.value);
+    if (pickupVisible && pickupHiddenEmpty) {
+      const rawPickup = extractUkPostcode(pickupVisible);
+      const normPickup = normalizePostcodeToDisplay(rawPickup);
+      if (normPickup) {
+        if (pickupPostcodeHidden) pickupPostcodeHidden.value = normPickup;
+        if (pickupPostcodeAltHidden) pickupPostcodeAltHidden.value = normPickup;
+      }
+    }
+    if (dropoffVisible && dropoffHiddenEmpty) {
+      const rawDropoff = extractUkPostcode(dropoffVisible);
+      const normDropoff = normalizePostcodeToDisplay(rawDropoff);
+      if (normDropoff) {
+        if (dropoffPostcodeHidden) dropoffPostcodeHidden.value = normDropoff;
+        if (dropoffPostcodeAltHidden) dropoffPostcodeAltHidden.value = normDropoff;
+      }
+    }
+
+    // Resolve postcodes from visible inputs or hidden fields (autocomplete may have set hidden)
+    const pickupResolved = resolvePostcodeFromInputs(
+      pickupPostcodeHidden?.value || pickupPostcodeAltHidden?.value,
+      pickupAddressInput?.value
+    );
+    const dropoffResolved = resolvePostcodeFromInputs(
+      dropoffPostcodeHidden?.value || dropoffPostcodeAltHidden?.value,
+      dropoffAddressInput?.value
+    );
+
+    if (!pickupResolved || !dropoffResolved) {
+      alert("Please enter valid UK pickup and delivery postcodes (e.g. SE6 2BG).");
+      return;
+    }
+    if (!isWithinServiceArea(pickupResolved) || !isWithinServiceArea(dropoffResolved)) {
+      alert("Sorry, we currently only cover London, Kent and Essex.");
+      return;
+    }
+
+    // Sync normalized postcodes to hidden form fields so getQuotePayload / buildValidatedQuotePayload use them
+    if (pickupPostcodeHidden) pickupPostcodeHidden.value = pickupResolved;
+    if (pickupPostcodeAltHidden) pickupPostcodeAltHidden.value = pickupResolved;
+    if (dropoffPostcodeHidden) dropoffPostcodeHidden.value = dropoffResolved;
+    if (dropoffPostcodeAltHidden) dropoffPostcodeAltHidden.value = dropoffResolved;
+
     const payloadStep1 = buildValidatedQuotePayload();
     if (!payloadStep1) return;
 
@@ -615,12 +698,28 @@ btnGetPrice?.addEventListener("click", async () => {
     return;
   }
 
+  // Step 2 (details page): resolve postcodes from visible/hidden before validation
+  const pickupResolved = resolvePostcodeFromInputs(
+    pickupPostcodeHidden?.value || pickupPostcodeAltHidden?.value,
+    pickupAddressInput?.value
+  );
+  const dropoffResolved = resolvePostcodeFromInputs(
+    dropoffPostcodeHidden?.value || dropoffPostcodeAltHidden?.value,
+    dropoffAddressInput?.value
+  );
+  if (pickupResolved && dropoffResolved) {
+    if (pickupPostcodeHidden) pickupPostcodeHidden.value = pickupResolved;
+    if (pickupPostcodeAltHidden) pickupPostcodeAltHidden.value = pickupResolved;
+    if (dropoffPostcodeHidden) dropoffPostcodeHidden.value = dropoffResolved;
+    if (dropoffPostcodeAltHidden) dropoffPostcodeAltHidden.value = dropoffResolved;
+  }
+
   if (!quoteForm.reportValidity()) return;
 
   const payload = getQuotePayload();
 
   if (!payload.pickup || !payload.dropoff) {
-    alert("Please enter valid UK pickup and delivery postcodes.");
+    alert("Please enter valid UK pickup and delivery postcodes (e.g. SE6 2BG).");
     return;
   }
 
