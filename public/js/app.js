@@ -368,6 +368,138 @@ function initPlacesClassic() {
 
 document.addEventListener("DOMContentLoaded", initPlacesClassic);
 
+// ==========================
+// UK POSTCODE AUTOCOMPLETE (postcodes.io)
+// ==========================
+
+const POSTCODES_IO_BASE = "https://api.postcodes.io";
+const POSTCODE_DEBOUNCE_MS = 280;
+const POSTCODE_MIN_LENGTH = 2;
+const POSTCODE_SUGGESTIONS_LIMIT = 10;
+
+/** Return true if the string looks like a partial UK postcode (starts with letter; 2–8 chars) */
+function looksLikePartialPostcode(str) {
+  const s = (str || "").trim();
+  if (s.length < POSTCODE_MIN_LENGTH || s.length > 8) return false;
+  return /^[A-Za-z][A-Za-z0-9\s]*$/.test(s);
+}
+
+let postcodeDebounceTimer = null;
+let postcodeDropdownEl = null;
+let postcodeDropdownActiveInput = null;
+
+function getPostcodeDropdown() {
+  if (postcodeDropdownEl) return postcodeDropdownEl;
+  postcodeDropdownEl = document.createElement("div");
+  postcodeDropdownEl.id = "postcodeAutocompleteDropdown";
+  postcodeDropdownEl.className = "postcode-autocomplete-dropdown";
+  postcodeDropdownEl.setAttribute("role", "listbox");
+  postcodeDropdownEl.hidden = true;
+  document.body.appendChild(postcodeDropdownEl);
+  return postcodeDropdownEl;
+}
+
+function hidePostcodeDropdown() {
+  const el = getPostcodeDropdown();
+  el.hidden = true;
+  el.innerHTML = "";
+  postcodeDropdownActiveInput = null;
+}
+
+function positionPostcodeDropdown(inputEl) {
+  if (!inputEl) return;
+  const rect = inputEl.getBoundingClientRect();
+  const dropdown = getPostcodeDropdown();
+  dropdown.style.position = "fixed";
+  dropdown.style.left = `${rect.left + window.scrollX}px`;
+  dropdown.style.top = `${rect.bottom + window.scrollY}px`;
+  dropdown.style.width = `${Math.max(rect.width, 260)}px`;
+}
+
+async function fetchPostcodeSuggestions(query) {
+  const q = (query || "").trim().replace(/\s+/g, " ");
+  if (!q) return [];
+  try {
+    const url = `${POSTCODES_IO_BASE}/postcodes?q=${encodeURIComponent(q)}&limit=${POSTCODE_SUGGESTIONS_LIMIT}`;
+    const res = await fetch(url);
+    if (!res.ok) return [];
+    const data = await res.json();
+    const result = data?.result;
+    if (!Array.isArray(result)) return [];
+    return result.map((item) => (typeof item === "string" ? item : item?.postcode || "")).filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+function showPostcodeSuggestions(list, inputEl, onSelect) {
+  const dropdown = getPostcodeDropdown();
+  dropdown.innerHTML = "";
+  if (!list.length) {
+    dropdown.hidden = true;
+    return;
+  }
+  list.forEach((postcode) => {
+    const item = document.createElement("div");
+    item.className = "postcode-autocomplete-item";
+    item.setAttribute("role", "option");
+    item.textContent = postcode;
+    item.addEventListener("click", () => {
+      onSelect(postcode);
+      hidePostcodeDropdown();
+    });
+    dropdown.appendChild(item);
+  });
+  positionPostcodeDropdown(inputEl);
+  dropdown.hidden = false;
+  postcodeDropdownActiveInput = inputEl;
+}
+
+function attachPostcodeAutocomplete(inputEl, kind) {
+  if (!inputEl) return;
+
+  const clearFn = kind === "pickup" ? clearPickupLocationFields : clearDropoffLocationFields;
+  const postcodeHidden = kind === "pickup" ? pickupPostcodeHidden : dropoffPostcodeHidden;
+  const postcodeAltHidden = kind === "pickup" ? pickupPostcodeAltHidden : dropoffPostcodeAltHidden;
+  const setSelectedFlag = kind === "pickup"
+    ? (v) => { pickupAddressSelected = v; }
+    : (v) => { dropoffAddressSelected = v; };
+
+  function onSelectPostcode(postcode) {
+    const display = normalizePostcodeToDisplay(postcode) || (postcode || "").trim();
+    inputEl.value = display;
+    clearFn();
+    if (postcodeHidden) postcodeHidden.value = display;
+    if (postcodeAltHidden) postcodeAltHidden.value = display;
+    setSelectedFlag(false);
+    inputEl.dispatchEvent(new Event("input", { bubbles: true }));
+    inputEl.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+
+  inputEl.addEventListener("input", () => {
+    const val = (inputEl.value || "").trim();
+    if (postcodeDebounceTimer) clearTimeout(postcodeDebounceTimer);
+    if (!looksLikePartialPostcode(val)) {
+      hidePostcodeDropdown();
+      return;
+    }
+    postcodeDebounceTimer = setTimeout(async () => {
+      postcodeDebounceTimer = null;
+      const list = await fetchPostcodeSuggestions(val);
+      showPostcodeSuggestions(list, inputEl, onSelectPostcode);
+    }, POSTCODE_DEBOUNCE_MS);
+  });
+
+  inputEl.addEventListener("blur", () => {
+    setTimeout(hidePostcodeDropdown, 180);
+  });
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  if (pickupAddressInput) attachPostcodeAutocomplete(pickupAddressInput, "pickup");
+  if (dropoffAddressInput) attachPostcodeAutocomplete(dropoffAddressInput, "dropoff");
+});
+
 document.addEventListener("DOMContentLoaded", () => {
   if (currentPage !== "step2") return;
 
