@@ -15,9 +15,17 @@ const btnNewQuote = $("btnNewQuote");
 const pickupAutocomplete = document.getElementById("pickupAutocomplete");
 const dropoffAutocomplete = document.getElementById("dropoffAutocomplete");
 
+// Visible address inputs (classic Places Autocomplete)
+const pickupAddressInput = document.getElementById("pickupAddress");
+const dropoffAddressInput = document.getElementById("dropoffAddress");
+
+// Hidden postcode fields (legacy + new naming)
 const pickupPostcodeHidden = document.getElementById("pickupPostcode");
 const dropoffPostcodeHidden = document.getElementById("dropoffPostcode");
+const pickupPostcodeAltHidden = document.getElementById("pickup_postcode");
+const dropoffPostcodeAltHidden = document.getElementById("dropoff_postcode");
 
+// Hidden fields to store full Google Places details
 const pickupFullAddressHidden = document.getElementById("pickup_full_address");
 const pickupPlaceIdHidden = document.getElementById("pickup_place_id");
 const pickupLatHidden = document.getElementById("pickup_lat");
@@ -35,6 +43,10 @@ const priceBreakdown = $("priceBreakdown");
 const priceNote = $("priceNote");
 
 let lastQuote = null;
+
+// Track whether a valid Places result has been selected
+let pickupAddressSelected = false;
+let dropoffAddressSelected = false;
 
 // ==========================
 // GENERIC UI / FETCH HELPERS
@@ -92,6 +104,8 @@ function clearPickupLocationFields() {
   if (pickupPlaceIdHidden) pickupPlaceIdHidden.value = "";
   if (pickupLatHidden) pickupLatHidden.value = "";
   if (pickupLngHidden) pickupLngHidden.value = "";
+  if (pickupPostcodeHidden) pickupPostcodeHidden.value = "";
+  if (pickupPostcodeAltHidden) pickupPostcodeAltHidden.value = "";
 }
 
 function clearDropoffLocationFields() {
@@ -99,6 +113,8 @@ function clearDropoffLocationFields() {
   if (dropoffPlaceIdHidden) dropoffPlaceIdHidden.value = "";
   if (dropoffLatHidden) dropoffLatHidden.value = "";
   if (dropoffLngHidden) dropoffLngHidden.value = "";
+  if (dropoffPostcodeHidden) dropoffPostcodeHidden.value = "";
+  if (dropoffPostcodeAltHidden) dropoffPostcodeAltHidden.value = "";
 }
 
 function readLatLngNumber(latLngLike, key) {
@@ -240,6 +256,100 @@ async function initPlacesAutocompleteElements() {
 initPlacesAutocompleteElements();
 
 // ==========================
+// CLASSIC GOOGLE PLACES AUTOCOMPLETE (text inputs)
+// ==========================
+//
+function handlePlaceChangedClassic(autocomplete, kind) {
+  const place = autocomplete.getPlace();
+  if (!place) return;
+
+  const formatted = place.formatted_address || "";
+  const loc = place.geometry?.location || null;
+  const lat = loc ? readLatLngNumber(loc, "lat") : null;
+  const lng = loc ? readLatLngNumber(loc, "lng") : null;
+  const postcode = extractPostcodeFromAddressComponents(place.address_components);
+
+  if (kind === "pickup") {
+    if (pickupFullAddressHidden) pickupFullAddressHidden.value = formatted;
+    if (pickupLatHidden) pickupLatHidden.value = lat != null ? String(lat) : "";
+    if (pickupLngHidden) pickupLngHidden.value = lng != null ? String(lng) : "";
+    if (pickupPostcodeHidden) pickupPostcodeHidden.value = postcode || "";
+    if (pickupPostcodeAltHidden) pickupPostcodeAltHidden.value = postcode || "";
+    if (pickupAddressInput) pickupAddressInput.value = formatted;
+    pickupAddressSelected = true;
+  } else if (kind === "dropoff") {
+    if (dropoffFullAddressHidden) dropoffFullAddressHidden.value = formatted;
+    if (dropoffLatHidden) dropoffLatHidden.value = lat != null ? String(lat) : "";
+    if (dropoffLngHidden) dropoffLngHidden.value = lng != null ? String(lng) : "";
+    if (dropoffPostcodeHidden) dropoffPostcodeHidden.value = postcode || "";
+    if (dropoffPostcodeAltHidden) dropoffPostcodeAltHidden.value = postcode || "";
+    if (dropoffAddressInput) dropoffAddressInput.value = formatted;
+    dropoffAddressSelected = true;
+  }
+
+  if (!postcode) {
+    alert("Please select a valid UK address from the dropdown.");
+  }
+}
+
+function attachManualInputHandlers(inputEl, clearFn, setSelectedFlag) {
+  if (!inputEl) return;
+  const handler = () => {
+    clearFn();
+    setSelectedFlag(false);
+  };
+  inputEl.addEventListener("input", handler);
+  inputEl.addEventListener("change", handler);
+}
+
+function initPlacesClassic() {
+  if (!pickupAddressInput && !dropoffAddressInput) return;
+
+  const tryInit = () => {
+    const gm = window.google?.maps;
+    if (!gm || !gm.places || !gm.places.Autocomplete) return false;
+
+    const options = {
+      componentRestrictions: { country: "gb" },
+      fields: ["address_components", "formatted_address", "geometry"],
+      types: ["address"],
+    };
+
+    if (pickupAddressInput) {
+      const acPickup = new gm.places.Autocomplete(pickupAddressInput, options);
+      acPickup.addListener("place_changed", () => handlePlaceChangedClassic(acPickup, "pickup"));
+    }
+
+    if (dropoffAddressInput) {
+      const acDropoff = new gm.places.Autocomplete(dropoffAddressInput, options);
+      acDropoff.addListener("place_changed", () => handlePlaceChangedClassic(acDropoff, "dropoff"));
+    }
+
+    attachManualInputHandlers(pickupAddressInput, clearPickupLocationFields, (v) => {
+      pickupAddressSelected = v;
+    });
+    attachManualInputHandlers(dropoffAddressInput, clearDropoffLocationFields, (v) => {
+      dropoffAddressSelected = v;
+    });
+
+    return true;
+  };
+
+  if (tryInit()) return;
+
+  let attempts = 0;
+  const maxAttempts = 40;
+  const timer = setInterval(() => {
+    attempts += 1;
+    if (tryInit() || attempts >= maxAttempts) {
+      clearInterval(timer);
+    }
+  }, 300);
+}
+
+document.addEventListener("DOMContentLoaded", initPlacesClassic);
+
+// ==========================
 // HELPERS
 // ==========================
 
@@ -362,8 +472,13 @@ btnGetPrice?.addEventListener("click", async () => {
 
   const payload = getQuotePayload();
 
-  if (!isLikelyValidPostcode(payload.pickup) || !isLikelyValidPostcode(payload.dropoff)) {
-    alert("Please enter valid UK postcodes for pickup and delivery.");
+  if (!pickupAddressSelected || !dropoffAddressSelected) {
+    alert("Please select pickup and delivery addresses from the dropdown suggestions.");
+    return;
+  }
+
+  if (!payload.pickup || !payload.dropoff) {
+    alert("Please select a valid UK address from the dropdown.");
     return;
   }
 

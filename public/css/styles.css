@@ -277,13 +277,19 @@ img{ max-width:100%; display:block; }
   gap: 12px;
   margin-bottom: 12px;
 }
+.form__row > label{
+  min-width: 0;
+}
 label{
   font-size: 13px;
   font-weight: 800;
   color: rgba(11,18,32,.92);
 }
-input, select{
+.form input,
+.form select{
   width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
   margin-top: 6px;
   padding: 12px 12px;
   border-radius: 14px;
@@ -292,7 +298,8 @@ input, select{
   outline: none;
   font-size: 14px;
 }
-input:focus, select:focus{
+.form input:focus,
+.form select:focus{
   border-color: rgba(37,99,235,.55);
   box-shadow: 0 0 0 4px rgba(37,99,235,.14);
 }
@@ -468,6 +475,10 @@ input:focus, select:focus{
   /*IMPORTANT:sticcky quote card feels broken on mobile*/
   .hero__right{position: static;top: auto;}
   .ctaStrip{ flex-direction: column; align-items: flex-start; }
+}
+/* Google Places dropdown */
+.pac-container{
+  z-index: 99999;
 }
 /* ===== Contact section ===== */
 .contactGrid{

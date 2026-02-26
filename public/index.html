@@ -104,65 +104,88 @@
             <form id="quoteForm" class="form">
               <div class="form__row">
                 <label>
-                  Pickup postcode (London)
-                  <input name="pickup" required placeholder="e.g. SE1 2AA" />
+                  Pickup address or postcode (London)
+                  <input
+                    id="pickupAddress"
+                    name="pickupAddress"
+                    type="text"
+                    placeholder="Pickup address or postcode (London)"
+                    autocomplete="off"
+                  />
                 </label>
 
                 <label>
-                  Delivery postcode (London)
-                  <input name="dropoff" required placeholder="e.g. E14 9AB" />
+                  Delivery address or postcode (London)
+                  <input
+                    id="dropoffAddress"
+                    name="dropoffAddress"
+                    type="text"
+                    placeholder="Delivery address or postcode (London)"
+                    autocomplete="off"
+                  />
                 </label>
               </div>
+
+              <!-- Hidden fields for postcodes used in pricing logic -->
+              <input type="hidden" id="pickupPostcode" name="pickup" />
+              <input type="hidden" id="dropoffPostcode" name="dropoff" />
+
+              <!-- Hidden postcode fields following new naming convention -->
+              <input type="hidden" id="pickup_postcode" name="pickup_postcode" />
+              <input type="hidden" id="dropoff_postcode" name="dropoff_postcode" />
+
+              <!-- Hidden fields to store full Google Places details -->
+              <input type="hidden" id="pickup_full_address" name="pickup_full_address" />
+              <input type="hidden" id="pickup_place_id" name="pickup_place_id" />
+              <input type="hidden" id="pickup_lat" name="pickup_lat" />
+              <input type="hidden" id="pickup_lng" name="pickup_lng" />
+
+              <input type="hidden" id="dropoff_full_address" name="dropoff_full_address" />
+              <input type="hidden" id="dropoff_place_id" name="dropoff_place_id" />
+              <input type="hidden" id="dropoff_lat" name="dropoff_lat" />
+              <input type="hidden" id="dropoff_lng" name="dropoff_lng" />
 
               <!-- ✅ UPDATED SECTION (ITEM TYPE / SIZE / COUNT / DETAILS) -->
               <div class="form__row">
                 <label>
-                  Item type
-                  <select name="itemType" required>
+                  Service
+                  <select name="serviceType" id="serviceType" required>
                     <option value="" selected disabled>Select…</option>
-                    <option value="single">Single item</option>
-                    <option value="mixed">Multiple items (mixed)</option>
-                    <option value="sofa">Sofa / Armchair</option>
-                    <option value="bed">Bed / Mattress</option>
-                    <option value="wardrobe">Wardrobe / Cabinet</option>
-                    <option value="table">Table / Desk</option>
-                    <option value="appliance">Washing machine / Fridge</option>
-                    <option value="boxes">Boxes / Bags</option>
-                    <option value="bike">Bike</option>
-                    <option value="tv">TV / Electronics</option>
-                    <option value="other">Other / Not listed</option>
+                    <option value="man_van">Man &amp; Van (single item / small move)</option>
+                    <option value="house_removal">House Removal</option>
                   </select>
                 </label>
 
-                <label>
-                  Approx size
-                  <select name="itemSize" required>
+                <label id="houseSizeWrapper" style="display:none;">
+                  Property size (for House Removal)
+                  <select name="houseSize" id="houseSize">
                     <option value="" selected disabled>Select…</option>
-                    <option value="small">Small (1 person)</option>
-                    <option value="medium">Medium (1–2 people)</option>
-                    <option value="large">Large (2-person lift)</option>
-                    <option value="xl">XL / Heavy</option>
+                    <option value="studio">Studio</option>
+                    <option value="1_bed">1 bed</option>
+                    <option value="2_bed">2 bed</option>
+                    <option value="3_bed">3 bed</option>
+                    <option value="4_bed">4 bed</option>
                   </select>
                 </label>
               </div>
 
-              <div class="form__row">
+              <div class="form__row" id="manVanDetailsRow">
                 <label>
                   Number of items
-                  <input name="itemCount" type="number" min="1" max="30" value="1" />
+                  <input name="itemCount" id="itemCount" type="number" min="1" max="30" value="1" />
                 </label>
 
                 <label>
                   Describe items (optional)
-                  <input name="itemDetails" placeholder="e.g. 2 chairs + 6 boxes + small table" />
+                  <input name="itemDetails" id="itemDetails" placeholder="e.g. 2 chairs + 6 boxes + small table" />
                 </label>
               </div>
               <!-- ✅ END UPDATED SECTION -->
 
-              <div class="form__row">
+              <div class="form__row" id="stairsRow">
                 <label>
                   Stairs at pickup?
-                  <select name="stairsPickup">
+                  <select name="stairsPickup" id="stairsPickup">
                     <option value="no">No</option>
                     <option value="yes">Yes</option>
                   </select>
@@ -170,7 +193,7 @@
 
                 <label>
                   Stairs at delivery?
-                  <select name="stairsDropoff">
+                  <select name="stairsDropoff" id="stairsDropoff">
                     <option value="no">No</option>
                     <option value="yes">Yes</option>
                   </select>
@@ -182,22 +205,7 @@
                   Preferred date
                   <input type="date" name="date" />
                 </label>
-<div class="form__row">
-  <label>
-    Congestion Charge Zone?
-    <select name="congestionZone" required>
-      <option value="no" selected>No</option>
-      <option value="yes">Yes </option>
-    </select>
-  </label>
 
-  <label>
-    &nbsp;
-    <small style="display:block; margin-top:6px; color: rgba(11,18,32,.65); font-weight:700;">
-      +£18 applies only during charge hours.
-    </small>
-  </label>
-</div>
                 <label>
                   Time window
                   <select name="timeWindow">
@@ -218,17 +226,24 @@
               <div id="priceBox" class="priceBox" hidden>
                 <div class="priceBox__top">
                   <div>
-                    <div class="priceBox__label">Fixed price</div>
+                    <div class="priceBox__label">Deposit today</div>
                     <div class="priceBox__price" id="priceValue">£—</div>
-                    <div class="priceBox__small" id="priceNote">Includes van + driver. London only.</div>
+                    <div class="priceBox__small" id="priceNote">
+                      You pay only the deposit now. Remaining balance is paid on the day.
+                    </div>
                   </div>
-                  <div class="priceBox__badge" id="zoneBadge">Zones —</div>
+                  <div class="priceBox__badge" id="zoneBadge">Service</div>
+                </div>
+
+                <div class="priceBox__summary">
+                  <div><strong>Total job price:</strong> <span id="priceTotal">£—</span></div>
+                  <div><strong>Remaining balance on the day:</strong> <span id="priceRemaining">£—</span></div>
                 </div>
 
                 <div class="priceBox__breakdown" id="priceBreakdown"></div>
 
                 <button type="button" id="btnBook" class="btn btn--full">
-                  Book this price
+                  Book with deposit
                 </button>
 
                 <p class="fineprint">
@@ -362,6 +377,11 @@
     </footer>
   </main>
 
+  <script async
+  src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDg4Y5qzzx1-2HbbxoOVMn1o6dO-Aj-M84&libraries=places&v=beta"
+  async defer
+  >
+  </script>
   <script src="./js/app.js" defer></script>
   
 
