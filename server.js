@@ -14,10 +14,19 @@ const BOOKINGS_FILE = path.join(__dirname, "bookings.json");
 const PUBLIC_DIR = path.join(__dirname, "public");
 const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
 
-// Pricing constants
+// Pricing constants (legacy form)
 const PER_MILE_RATE = 2; // £ per mile
 const MIN_DEPOSIT = 25; // £
 const CONGESTION_FEE = 18; // £ flat
+
+// New pricing form constants
+const NEW_BASE_FEE = 35;
+const NEW_PER_MILE = 1.5;
+const NEW_CONGESTION_FEE = 18;
+const NEW_DEPOSIT_PERCENT = 0.25;
+const LONDON_CENTER_LAT = 51.5074;
+const LONDON_CENTER_LNG = -0.1278;
+const LONDON_ZONE_RADIUS_MILES = 17; // rough "zones 1-6" radius
 
 // ------------------------------
 // Webhook MUST be raw and BEFORE express.json
@@ -67,6 +76,10 @@ app.use(express.static(PUBLIC_DIR));
 
 app.get("/", (req, res) => {
   res.sendFile(path.join(PUBLIC_DIR, "index.html"));
+});
+
+app.get("/new-form", (req, res) => {
+  res.sendFile(path.join(PUBLIC_DIR, "new-form.html"));
 });
 
 // ------------------------------
@@ -337,15 +350,134 @@ async function calculatePricing(rawBody) {
 }
 
 // ------------------------------
+// New pricing form: lat/lng payload, base £35, £1.50/mile, congestion £18
+// ------------------------------
+
+function haversineMiles(lat1, lng1, lat2, lng2) {
+  const R = 3959; // Earth radius in miles
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLng / 2) *
+      Math.sin(dLng / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
+function isInLondonZones(lat, lng) {
+  if (lat == null || lng == null || !Number.isFinite(lat) || !Number.isFinite(lng)) return false;
+  const miles = haversineMiles(lat, lng, LONDON_CENTER_LAT, LONDON_CENTER_LNG);
+  return miles <= LONDON_ZONE_RADIUS_MILES;
+}
+
+async function distanceMatrixMiles(originLat, originLng, destLat, destLng) {
+  const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+  if (!apiKey) return 0;
+  const origin = `${originLat},${originLng}`;
+  const dest = `${destLat},${destLng}`;
+  const params = new URLSearchParams({
+    units: "imperial",
+    origins: origin,
+    destinations: dest,
+    key: apiKey,
+  });
+  const url = `https://maps.googleapis.com/maps/api/distancematrix/json?${params.toString()}`;
+  const resp = await fetch(url);
+  if (!resp.ok) throw new Error(`Distance Matrix HTTP ${resp.status}`);
+  const data = await resp.json();
+  const element = data?.rows?.[0]?.elements?.[0];
+  if (!element || element.status !== "OK" || !element.distance) {
+    throw new Error(`Distance Matrix: ${element?.status || "no data"}`);
+  }
+  const miles = element.distance.value / 1609.344;
+  return Number.isFinite(miles) && miles >= 0 ? Math.round(miles * 10) / 10 : 0;
+}
+
+function isNewPricePayload(body) {
+  const p = body?.pickup;
+  const d = body?.dropoff;
+  return (
+    p &&
+    typeof p === "object" &&
+    typeof p.lat === "number" &&
+    typeof p.lng === "number" &&
+    d &&
+    typeof d === "object" &&
+    typeof d.lat === "number" &&
+    typeof d.lng === "number"
+  );
+}
+
+async function calculatePricingNew(body) {
+  const pickup = body.pickup || {};
+  const dropoff = body.dropoff || {};
+  const lat1 = Number(pickup.lat);
+  const lng1 = Number(pickup.lng);
+  const lat2 = Number(dropoff.lat);
+  const lng2 = Number(dropoff.lng);
+
+  if (!Number.isFinite(lat1) || !Number.isFinite(lng1) || !Number.isFinite(lat2) || !Number.isFinite(lng2)) {
+    throw new Error("Pickup and dropoff must include valid lat and lng.");
+  }
+
+  let miles = 0;
+  try {
+    miles = await distanceMatrixMiles(lat1, lng1, lat2, lng2);
+  } catch (err) {
+    console.error("Distance Matrix failed, using 0 miles:", err.message);
+  }
+
+  const distanceCharge = NEW_PER_MILE * miles;
+  const pickupInLondon = isInLondonZones(lat1, lng1);
+  const dropoffInLondon = isInLondonZones(lat2, lng2);
+  const congestionApplied = pickupInLondon || dropoffInLondon;
+  const congestionFee = congestionApplied ? NEW_CONGESTION_FEE : 0;
+
+  let total = NEW_BASE_FEE + distanceCharge + congestionFee;
+  total = Math.round(total);
+  const deposit = Math.round(total * NEW_DEPOSIT_PERCENT);
+  const remaining = total - deposit;
+
+  const breakdown = [
+    `Base fee — £${NEW_BASE_FEE}`,
+    `Distance — £${distanceCharge.toFixed(2)} (${miles.toFixed(1)} miles @ £${NEW_PER_MILE}/mile)`,
+    congestionApplied ? `Congestion charge (London) — £${NEW_CONGESTION_FEE}` : null,
+    `Total — £${total}`,
+    `Deposit (25%) — £${deposit}`,
+    `Remaining balance — £${remaining}`,
+  ].filter(Boolean);
+
+  return {
+    total,
+    deposit,
+    remaining,
+    miles,
+    distanceCharge: Math.round(distanceCharge * 100) / 100,
+    baseFee: NEW_BASE_FEE,
+    perMile: NEW_PER_MILE,
+    congestionApplied,
+    congestionFee: congestionApplied ? NEW_CONGESTION_FEE : 0,
+    breakdown,
+    note: "Pay the deposit now. Remaining balance is paid to the driver on the day.",
+  };
+}
+
+// ------------------------------
 // Price endpoint
 // ------------------------------
 
 app.post("/api/price", async (req, res) => {
   try {
-    const pricing = await calculatePricing(req.body || {});
+    const body = req.body || {};
+    const pricing = isNewPricePayload(body)
+      ? await calculatePricingNew(body)
+      : await calculatePricing(body);
     res.json(pricing);
   } catch (e) {
-    const status = /required|invalid|Please/.test(e.message) ? 400 : 500;
+    const status = /required|invalid|Please|must include/.test(e.message) ? 400 : 500;
     res.status(status).json({ error: e.message });
   }
 });
@@ -520,7 +652,13 @@ app.get("/api/maps-config", (req, res) => {
 // Start server
 // ------------------------------
 
+// Optional: warn if Google Maps key is missing (needed for new-form and distance)
+if (!process.env.GOOGLE_MAPS_API_KEY) {
+  console.warn("⚠️  GOOGLE_MAPS_API_KEY is not set. New pricing form and distance calculation will be limited.");
+}
+
 app.listen(PORT, () => {
   console.log(`✅ Server running on http://localhost:${PORT}`);
+  console.log(`   New pricing form: http://localhost:${PORT}/new-form`);
 });
 

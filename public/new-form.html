@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Get a price — Collect My Item</title>
+  <meta name="description" content="Enter pickup and dropoff to get an instant fixed price. UK postcode or full address." />
+  <link rel="stylesheet" href="new-form.css" />
+</head>
+<body>
+  <div class="page">
+    <header class="header">
+      <div class="container">
+        <a class="brand" href="/">Collect My Item</a>
+        <a class="link" href="/">← Back to home</a>
+      </div>
+    </header>
+
+    <main class="main container">
+      <h1 class="title">Get an instant price</h1>
+      <p class="subtitle">Enter UK postcode or full address for pickup and dropoff. We'll calculate distance and show your fixed price.</p>
+
+      <form id="pricingForm" class="form" novalidate>
+        <div class="form__section">
+          <h2 class="form__heading">Locations</h2>
+
+          <div class="field">
+            <label class="field__label" for="pickup">Pickup</label>
+            <input
+              id="pickup"
+              name="pickup"
+              type="text"
+              class="field__input"
+              placeholder="Postcode or full address (UK)"
+              autocomplete="off"
+              aria-describedby="pickup-hint"
+            />
+            <span id="pickup-hint" class="field__hint">Start typing a UK postcode or address</span>
+            <span id="pickup-error" class="field__error" role="alert" aria-live="polite"></span>
+          </div>
+
+          <div class="field">
+            <label class="field__label" for="dropoff">Dropoff</label>
+            <input
+              id="dropoff"
+              name="dropoff"
+              type="text"
+              class="field__input"
+              placeholder="Postcode or full address (UK)"
+              autocomplete="off"
+              aria-describedby="dropoff-hint"
+            />
+            <span id="dropoff-hint" class="field__hint">Start typing a UK postcode or address</span>
+            <span id="dropoff-error" class="field__error" role="alert" aria-live="polite"></span>
+          </div>
+        </div>
+
+        <div class="form__section">
+          <h2 class="form__heading">Trip details</h2>
+
+          <div class="field">
+            <label class="field__label" for="serviceType">Service type</label>
+            <select id="serviceType" name="serviceType" class="field__input field__input--select">
+              <option value="standard">Standard</option>
+              <option value="express">Express</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label class="field__label" for="itemsCount">Number of items</label>
+            <input
+              id="itemsCount"
+              name="itemsCount"
+              type="number"
+              min="1"
+              max="999"
+              value="1"
+              class="field__input"
+            />
+          </div>
+
+          <div class="field field--row">
+            <label class="field__label">Stairs at pickup</label>
+            <div class="field__group">
+              <label class="radio">
+                <input type="radio" name="stairsPickup" value="no" checked /> No
+              </label>
+              <label class="radio">
+                <input type="radio" name="stairsPickup" value="yes" /> Yes
+              </label>
+            </div>
+          </div>
+
+          <div class="field field--row">
+            <label class="field__label">Stairs at dropoff</label>
+            <div class="field__group">
+              <label class="radio">
+                <input type="radio" name="stairsDropoff" value="no" checked /> No
+              </label>
+              <label class="radio">
+                <input type="radio" name="stairsDropoff" value="yes" /> Yes
+              </label>
+            </div>
+          </div>
+
+          <div class="field">
+            <label class="field__label" for="date">Preferred date</label>
+            <input
+              id="date"
+              name="date"
+              type="date"
+              class="field__input"
+            />
+          </div>
+
+          <div class="field">
+            <label class="field__label" for="timeWindow">Time window</label>
+            <select id="timeWindow" name="timeWindow" class="field__input field__input--select">
+              <option value="any">Any time</option>
+              <option value="morning">Morning (8am–12pm)</option>
+              <option value="afternoon">Afternoon (12pm–5pm)</option>
+              <option value="evening">Evening (5pm–8pm)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form__actions">
+          <button type="submit" id="submitBtn" class="btn btn--primary">Get instant price</button>
+        </div>
+      </form>
+
+      <section id="resultSection" class="result" aria-live="polite" hidden>
+        <h2 class="result__title">Your price</h2>
+        <div id="resultContent" class="result__content"></div>
+      </section>
+
+      <section id="errorSection" class="error-box" role="alert" hidden>
+        <p id="errorMessage"></p>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="container">
+        <p>Collect My Item — London &amp; UK item collection and delivery.</p>
+      </div>
+    </footer>
+  </div>
+
+  <script src="new-form.js"></script>
+</body>
+</html>
