@@ -44,6 +44,8 @@ const priceNote = $("priceNote");
 
 let lastQuote = null;
 
+const currentPage = document.body?.dataset?.page || "";
+
 // Track whether a valid Places result has been selected
 let pickupAddressSelected = false;
 let dropoffAddressSelected = false;
@@ -292,10 +294,15 @@ function handlePlaceChangedClassic(autocomplete, kind) {
   }
 }
 
-function attachManualInputHandlers(inputEl, clearFn, setSelectedFlag) {
+function attachManualInputHandlers(inputEl, clearFn, setSelectedFlag, postcodeHidden, postcodeAltHidden) {
   if (!inputEl) return;
   const handler = () => {
+    const raw = (inputEl.value || "").toString();
+    // Clear location-specific fields (lat/lng/place details)
     clearFn();
+    // We still want pricing & validation to work off the hidden postcode fields
+    if (postcodeHidden) postcodeHidden.value = raw;
+    if (postcodeAltHidden) postcodeAltHidden.value = raw;
     setSelectedFlag(false);
   };
   inputEl.addEventListener("input", handler);
@@ -325,12 +332,24 @@ function initPlacesClassic() {
       acDropoff.addListener("place_changed", () => handlePlaceChangedClassic(acDropoff, "dropoff"));
     }
 
-    attachManualInputHandlers(pickupAddressInput, clearPickupLocationFields, (v) => {
-      pickupAddressSelected = v;
-    });
-    attachManualInputHandlers(dropoffAddressInput, clearDropoffLocationFields, (v) => {
-      dropoffAddressSelected = v;
-    });
+    attachManualInputHandlers(
+      pickupAddressInput,
+      clearPickupLocationFields,
+      (v) => {
+        pickupAddressSelected = v;
+      },
+      pickupPostcodeHidden,
+      pickupPostcodeAltHidden
+    );
+    attachManualInputHandlers(
+      dropoffAddressInput,
+      clearDropoffLocationFields,
+      (v) => {
+        dropoffAddressSelected = v;
+      },
+      dropoffPostcodeHidden,
+      dropoffPostcodeAltHidden
+    );
 
     return true;
   };
@@ -349,6 +368,37 @@ function initPlacesClassic() {
 
 document.addEventListener("DOMContentLoaded", initPlacesClassic);
 
+document.addEventListener("DOMContentLoaded", () => {
+  if (currentPage !== "step2") return;
+
+  try {
+    const pickupAddressStored = sessionStorage.getItem("pickupAddress") || "";
+    const dropoffAddressStored = sessionStorage.getItem("dropoffAddress") || "";
+    const pickupPostcodeStored = sessionStorage.getItem("pickupPostcode") || "";
+    const dropoffPostcodeStored = sessionStorage.getItem("dropoffPostcode") || "";
+
+    const pickupDisplay = document.getElementById("pickupAddressReadOnly");
+    const dropoffDisplay = document.getElementById("dropoffAddressReadOnly");
+
+    if (pickupDisplay) pickupDisplay.value = pickupAddressStored || pickupPostcodeStored;
+    if (dropoffDisplay) dropoffDisplay.value = dropoffAddressStored || dropoffPostcodeStored;
+
+    if (pickupPostcodeHidden) pickupPostcodeHidden.value = pickupPostcodeStored;
+    if (pickupPostcodeAltHidden) pickupPostcodeAltHidden.value = pickupPostcodeStored;
+    if (dropoffPostcodeHidden) dropoffPostcodeHidden.value = dropoffPostcodeStored;
+    if (dropoffPostcodeAltHidden) dropoffPostcodeAltHidden.value = dropoffPostcodeStored;
+
+    if (pickupFullAddressHidden) {
+      pickupFullAddressHidden.value = pickupAddressStored || pickupPostcodeStored;
+    }
+    if (dropoffFullAddressHidden) {
+      dropoffFullAddressHidden.value = dropoffAddressStored || dropoffPostcodeStored;
+    }
+  } catch (err) {
+    console.warn("Unable to read sessionStorage on details page", err);
+  }
+});
+
 // ==========================
 // HELPERS
 // ==========================
@@ -364,6 +414,47 @@ function isLikelyValidPostcode(pc) {
   const s = cleanPostcode(pc);
   // Simple UK postcode check (basic, not exhaustive)
   return /^[A-Z]{1,2}\d[A-Z0-9]?\d[A-Z]{2}$/.test(s);
+}
+
+function isWithinServiceArea(pc) {
+  const s = cleanPostcode(pc);
+  const match = s.match(/^[A-Z]+/);
+  if (!match) return false;
+  const area = match[0];
+
+  // London, Kent, Essex postal areas
+  const allowedAreas = new Set([
+    // London core + outer
+    "E",
+    "EC",
+    "N",
+    "NW",
+    "SE",
+    "SW",
+    "W",
+    "WC",
+    "BR",
+    "CR",
+    "EN",
+    "HA",
+    "IG",
+    "KT",
+    "RM",
+    "SM",
+    "TW",
+    "UB",
+    // Kent
+    "CT",
+    "DA",
+    "ME",
+    "TN",
+    // Essex
+    "CM",
+    "CO",
+    "SS",
+  ]);
+
+  return allowedAreas.has(area);
 }
 
 // ==========================
@@ -444,6 +535,34 @@ function getQuotePayload() {
   };
 }
 
+function buildValidatedQuotePayload() {
+  if (!quoteForm || !quoteForm.reportValidity()) return null;
+
+  const payload = getQuotePayload();
+
+  if (!payload.pickup || !payload.dropoff) {
+    alert("Please enter valid UK pickup and delivery postcodes.");
+    return null;
+  }
+
+  if (!isLikelyValidPostcode(payload.pickup) || !isLikelyValidPostcode(payload.dropoff)) {
+    alert("Please enter valid UK postcodes for pickup and delivery.");
+    return null;
+  }
+
+  if (!isWithinServiceArea(payload.pickup) || !isWithinServiceArea(payload.dropoff)) {
+    alert("Sorry, we currently only cover London, Kent and Essex.");
+    return null;
+  }
+
+  if (payload.serviceType === "house_removal" && !payload.houseSize) {
+    alert("Please select the property size for house removal.");
+    return null;
+  }
+
+  return payload;
+}
+
 // ==========================
 // SERVICE TYPE TOGGLING
 // ==========================
@@ -468,17 +587,50 @@ serviceTypeSelect?.addEventListener("change", () => {
 // ==========================
 
 btnGetPrice?.addEventListener("click", async () => {
+  if (currentPage === "step1") {
+    const payloadStep1 = buildValidatedQuotePayload();
+    if (!payloadStep1) return;
+
+    const pickupAddressStep1 =
+      pickupAddressInput?.value ||
+      pickupFullAddressHidden?.value ||
+      payloadStep1.pickup ||
+      "";
+    const dropoffAddressStep1 =
+      dropoffAddressInput?.value ||
+      dropoffFullAddressHidden?.value ||
+      payloadStep1.dropoff ||
+      "";
+
+    try {
+      sessionStorage.setItem("pickupPostcode", payloadStep1.pickup);
+      sessionStorage.setItem("dropoffPostcode", payloadStep1.dropoff);
+      sessionStorage.setItem("pickupAddress", pickupAddressStep1);
+      sessionStorage.setItem("dropoffAddress", dropoffAddressStep1);
+    } catch (err) {
+      console.warn("Unable to persist to sessionStorage", err);
+    }
+
+    window.location.href = "details.html";
+    return;
+  }
+
   if (!quoteForm.reportValidity()) return;
 
   const payload = getQuotePayload();
 
-  if (!pickupAddressSelected || !dropoffAddressSelected) {
-    alert("Please select pickup and delivery addresses from the dropdown suggestions.");
+  if (!payload.pickup || !payload.dropoff) {
+    alert("Please enter valid UK pickup and delivery postcodes.");
     return;
   }
 
-  if (!payload.pickup || !payload.dropoff) {
-    alert("Please select a valid UK address from the dropdown.");
+  if (!isLikelyValidPostcode(payload.pickup) || !isLikelyValidPostcode(payload.dropoff)) {
+    alert("Please enter valid UK postcodes for pickup and delivery.");
+    return;
+  }
+
+  if (!isWithinServiceArea(payload.pickup) || !isWithinServiceArea(payload.dropoff)) {
+    alert("Sorry, we currently only cover London, Kent and Essex.");
     return;
   }
 
