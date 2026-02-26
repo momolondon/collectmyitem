@@ -12,8 +12,8 @@ const btnBook = $("btnBook");
 const btnBack = $("btnBack");
 const btnNewQuote = $("btnNewQuote");
 
-const pickupAddressInput = document.getElementById("pickupAddress");
-const dropoffAddressInput = document.getElementById("dropoffAddress");
+const pickupAutocomplete = document.getElementById("pickupAutocomplete");
+const dropoffAutocomplete = document.getElementById("dropoffAutocomplete");
 
 const pickupPostcodeHidden = document.getElementById("pickupPostcode");
 const dropoffPostcodeHidden = document.getElementById("dropoffPostcode");
@@ -84,7 +84,7 @@ async function postJSON(url, data) {
 }
 
 // ==========================
-// ADDRESS AUTOCOMPLETE (GOOGLE PLACES)
+// ADDRESS AUTOCOMPLETE (NEW GOOGLE PLACES)
 // ==========================
 
 function clearPickupLocationFields() {
@@ -101,162 +101,143 @@ function clearDropoffLocationFields() {
   if (dropoffLngHidden) dropoffLngHidden.value = "";
 }
 
-// When user types manually (no selection yet), keep postcode fields in sync
-if (pickupAddressInput && pickupPostcodeHidden) {
-  pickupAddressInput.addEventListener("input", () => {
-    pickupPostcodeHidden.value = pickupAddressInput.value || "";
-    clearPickupLocationFields();
-  });
+function readLatLngNumber(latLngLike, key) {
+  if (!latLngLike) return null;
+  const v = latLngLike[key];
+  if (typeof v === "function") return v.call(latLngLike);
+  if (typeof v === "number") return v;
+  return null;
 }
 
-if (dropoffAddressInput && dropoffPostcodeHidden) {
-  dropoffAddressInput.addEventListener("input", () => {
-    dropoffPostcodeHidden.value = dropoffAddressInput.value || "";
-    clearDropoffLocationFields();
-  });
+function extractPostcodeFromAddressComponents(addressComponents) {
+  const list = Array.isArray(addressComponents) ? addressComponents : [];
+  for (const c of list) {
+    const types = c?.types;
+    if (Array.isArray(types) && types.includes("postal_code")) {
+      return c.longText || c.shortText || "";
+    }
+  }
+  return "";
 }
 
-function initPlacesAutocomplete() {
-  if (!window.google || !google.maps || !google.maps.places) {
-    console.error("Google Maps Places library not available.");
-    return;
+function setAutocompleteValue(el, value) {
+  if (!el) return;
+  try {
+    if (typeof el.value !== "undefined") el.value = value;
+  } catch {
+    // ignore
+  }
+}
+
+function syncFreeTextToPostcode(el, postcodeHidden, clearLocationFields) {
+  if (!el || !postcodeHidden) return;
+
+  const handler = () => {
+    const val = (el.value ?? "").toString();
+    postcodeHidden.value = val || "";
+    clearLocationFields();
+  };
+
+  el.addEventListener("input", handler);
+  el.addEventListener("change", handler);
+
+  // Some browsers/components don't bubble `input` reliably from the internal input.
+  // Bind to the internal input when it becomes available.
+  let tries = 0;
+  const maxTries = 25;
+  const timer = setInterval(() => {
+    tries += 1;
+    if (tries > maxTries) {
+      clearInterval(timer);
+      return;
+    }
+    const root = el.shadowRoot;
+    const inner = root?.querySelector?.("input");
+    if (!inner) return;
+    inner.addEventListener("input", handler);
+    inner.addEventListener("change", handler);
+    clearInterval(timer);
+  }, 200);
+}
+
+async function initPlacesAutocompleteElements() {
+  if (!pickupAutocomplete && !dropoffAutocomplete) return;
+
+  // Wait for the Google Maps script (async) to define the custom element.
+  try {
+    await customElements.whenDefined("gmp-place-autocomplete");
+  } catch {
+    // ignore
   }
 
-  const placeFields = ["formatted_address", "place_id", "geometry", "address_components"];
+  // When user types manually (no selection yet), keep postcode fields in sync
+  syncFreeTextToPostcode(pickupAutocomplete, pickupPostcodeHidden, clearPickupLocationFields);
+  syncFreeTextToPostcode(dropoffAutocomplete, dropoffPostcodeHidden, clearDropoffLocationFields);
 
-  if (pickupAddressInput && pickupPostcodeHidden) {
-    const acPickup = new google.maps.places.Autocomplete(pickupAddressInput, {
-      componentRestrictions: { country: "gb" },
-      fields: placeFields,
-    });
+  pickupAutocomplete?.addEventListener("gmp-select", async ({ placePrediction }) => {
+    try {
+      if (!placePrediction) return;
 
-    acPickup.addListener("place_changed", () => {
-      const place = acPickup.getPlace();
-      if (!place || !place.geometry || !place.geometry.location) {
-        alert("Please select a valid UK address from the suggestions.");
-        clearPickupLocationFields();
-        return;
-      }
+      const place = placePrediction.toPlace();
+      await place.fetchFields({ fields: ["formattedAddress", "location", "addressComponents"] });
 
-      const formatted =
-        place.formatted_address || pickupAddressInput.value || "";
-      pickupAddressInput.value = formatted;
+      const formatted = place.formattedAddress || "";
       if (pickupFullAddressHidden) pickupFullAddressHidden.value = formatted;
-      if (pickupPlaceIdHidden) pickupPlaceIdHidden.value = place.place_id || "";
+      if (pickupPlaceIdHidden) pickupPlaceIdHidden.value = place.id || placePrediction.placeId || "";
+      setAutocompleteValue(pickupAutocomplete, formatted);
 
-      const loc = place.geometry.location;
-      const lat =
-        typeof loc.lat === "function" ? loc.lat() : loc.lat;
-      const lng =
-        typeof loc.lng === "function" ? loc.lng() : loc.lng;
-
+      const loc = place.location;
+      const lat = readLatLngNumber(loc, "lat");
+      const lng = readLatLngNumber(loc, "lng");
       if (pickupLatHidden) pickupLatHidden.value = lat != null ? String(lat) : "";
       if (pickupLngHidden) pickupLngHidden.value = lng != null ? String(lng) : "";
 
-      const components = place.address_components || [];
-      const pcComp = components.find(
-        (c) => c.types && c.types.includes("postal_code")
-      );
-      const postcode = pcComp?.long_name || "";
-      pickupPostcodeHidden.value = postcode || "";
+      const postcode = extractPostcodeFromAddressComponents(place.addressComponents);
+      if (pickupPostcodeHidden) pickupPostcodeHidden.value = postcode || "";
 
       if (!postcode) {
-        alert(
-          "We couldn't find a postcode for this address. Please type the postcode manually."
-        );
+        alert("We couldn't find a postcode for this address. Please type the postcode manually.");
       }
-    });
-  }
+    } catch (err) {
+      console.error(err);
+      alert("Please select a valid UK address from the suggestions.");
+      clearPickupLocationFields();
+    }
+  });
 
-  if (dropoffAddressInput && dropoffPostcodeHidden) {
-    const acDropoff = new google.maps.places.Autocomplete(dropoffAddressInput, {
-      componentRestrictions: { country: "gb" },
-      fields: placeFields,
-    });
+  dropoffAutocomplete?.addEventListener("gmp-select", async ({ placePrediction }) => {
+    try {
+      if (!placePrediction) return;
 
-    acDropoff.addListener("place_changed", () => {
-      const place = acDropoff.getPlace();
-      if (!place || !place.geometry || !place.geometry.location) {
-        alert("Please select a valid UK address from the suggestions.");
-        clearDropoffLocationFields();
-        return;
-      }
+      const place = placePrediction.toPlace();
+      await place.fetchFields({ fields: ["formattedAddress", "location", "addressComponents"] });
 
-      const formatted =
-        place.formatted_address || dropoffAddressInput.value || "";
-      dropoffAddressInput.value = formatted;
-      if (dropoffFullAddressHidden)
-        dropoffFullAddressHidden.value = formatted;
-      if (dropoffPlaceIdHidden) dropoffPlaceIdHidden.value = place.place_id || "";
+      const formatted = place.formattedAddress || "";
+      if (dropoffFullAddressHidden) dropoffFullAddressHidden.value = formatted;
+      if (dropoffPlaceIdHidden) dropoffPlaceIdHidden.value = place.id || placePrediction.placeId || "";
+      setAutocompleteValue(dropoffAutocomplete, formatted);
 
-      const loc = place.geometry.location;
-      const lat =
-        typeof loc.lat === "function" ? loc.lat() : loc.lat;
-      const lng =
-        typeof loc.lng === "function" ? loc.lng() : loc.lng;
-
+      const loc = place.location;
+      const lat = readLatLngNumber(loc, "lat");
+      const lng = readLatLngNumber(loc, "lng");
       if (dropoffLatHidden) dropoffLatHidden.value = lat != null ? String(lat) : "";
       if (dropoffLngHidden) dropoffLngHidden.value = lng != null ? String(lng) : "";
 
-      const components = place.address_components || [];
-      const pcComp = components.find(
-        (c) => c.types && c.types.includes("postal_code")
-      );
-      const postcode = pcComp?.long_name || "";
-      dropoffPostcodeHidden.value = postcode || "";
+      const postcode = extractPostcodeFromAddressComponents(place.addressComponents);
+      if (dropoffPostcodeHidden) dropoffPostcodeHidden.value = postcode || "";
 
       if (!postcode) {
-        alert(
-          "We couldn't find a postcode for this address. Please type the postcode manually."
-        );
+        alert("We couldn't find a postcode for this address. Please type the postcode manually.");
       }
-    });
-  }
-}
-
-function loadGoogleMapsPlaces() {
-  // Only load if we actually have address inputs on the page
-  if (!pickupAddressInput && !dropoffAddressInput) return;
-
-  // Avoid loading script multiple times
-  const existing = document.querySelector('script[data-google-maps="true"]');
-  if (existing) {
-    if (window.google && google.maps && google.maps.places) {
-      initPlacesAutocomplete();
-    } else {
-      existing.addEventListener("load", initPlacesAutocomplete);
+    } catch (err) {
+      console.error(err);
+      alert("Please select a valid UK address from the suggestions.");
+      clearDropoffLocationFields();
     }
-    return;
-  }
-
-  fetch("/api/maps-config")
-    .then((res) => {
-      if (!res.ok) {
-        throw new Error(`GET /api/maps-config failed (${res.status})`);
-      }
-      return res.json();
-    })
-    .then((cfg) => {
-      if (!cfg || !cfg.apiKey) return;
-      const script = document.createElement("script");
-      script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(
-        cfg.apiKey
-      )}&libraries=places`;
-      script.async = true;
-      script.defer = true;
-      script.dataset.googleMaps = "true";
-      script.onload = initPlacesAutocomplete;
-      script.onerror = () => {
-        console.error("Failed to load Google Maps JavaScript API.");
-      };
-      document.head.appendChild(script);
-    })
-    .catch((err) => {
-      console.error("Failed to load Google Maps config or script", err);
-    });
+  });
 }
 
-loadGoogleMapsPlaces();
+initPlacesAutocompleteElements();
 
 // ==========================
 // HELPERS
