@@ -140,23 +140,77 @@ function isValidPostcode(pc) {
   return /^[A-Z]{1,2}\d[A-Z0-9]?\d[A-Z]{2}$/.test(s);
 }
 
-function isInCongestionZone(pc) {
+/**
+ * London Congestion Charge: allowed postcode areas only.
+ * Order matters: check longer prefixes (e.g. SE11) before shorter (SE1).
+ */
+const CONGESTION_ZONE_PREFIXES = [
+  "WC1", "WC2", "EC1", "EC2", "EC3", "EC4",
+  "W1", "SW1", "SE11", "SE1",
+];
+
+/** Returns true if the postcode outward code is in the congestion zone area list. */
+function isPostcodeInCongestionArea(pc) {
   const s = cleanPostcode(pc);
   if (!s) return false;
-  // Very simple approximation of central London congestion zone prefixes
-  return (
-    s.startsWith("EC1") ||
-    s.startsWith("EC2") ||
-    s.startsWith("EC3") ||
-    s.startsWith("EC4") ||
-    s.startsWith("WC1") ||
-    s.startsWith("WC2") ||
-    s.startsWith("W1") ||
-    s.startsWith("SW1") ||
-    s.startsWith("SE1") ||
-    s.startsWith("E1") ||
-    s.startsWith("N1")
-  );
+  return CONGESTION_ZONE_PREFIXES.some((prefix) => s.startsWith(prefix));
+}
+
+/**
+ * Returns true if the given date/time falls within London Congestion Charge hours:
+ * Mon–Fri: 7:00–18:00
+ * Sat–Sun: 12:01–18:00
+ * dateTime is treated as local (Europe/London). Use buildDateTimeForCongestion for consistency.
+ */
+function isWithinCongestionChargingHours(dateTime) {
+  if (!dateTime || !(dateTime instanceof Date) || Number.isNaN(dateTime.getTime())) return false;
+  const day = dateTime.getDay(); // 0=Sun, 6=Sat
+  const hours = dateTime.getHours();
+  const minutes = dateTime.getMinutes();
+  const totalMinutes = hours * 60 + minutes;
+
+  if (day >= 1 && day <= 5) {
+    // Mon–Fri: 7am (420 min) to 6pm (1080 min) inclusive
+    return totalMinutes >= 420 && totalMinutes < 1080;
+  }
+  // Sat–Sun: 12:01pm (721 min) to 6pm (1080 min) inclusive
+  return totalMinutes >= 721 && totalMinutes < 1080;
+}
+
+/**
+ * Returns true only if the postcode is in a congestion zone area AND the date/time
+ * is within charging hours. If dateTime is not provided, returns false (no charge).
+ */
+function isCongestionZone(postcode, dateTime) {
+  if (!isPostcodeInCongestionArea(postcode)) return false;
+  if (!dateTime) return false;
+  return isWithinCongestionChargingHours(dateTime);
+}
+
+/**
+ * Build a representative Date for congestion charging from date (YYYY-MM-DD) and timeWindow.
+ * Returns null if no date, so caller should not apply congestion charge.
+ */
+function buildDateTimeForCongestion(dateStr, timeWindow) {
+  if (!dateStr || typeof dateStr !== "string") return null;
+  const datePart = String(dateStr).trim();
+  if (!datePart) return null;
+  // Parse YYYY-MM-DD as local date, then set time per timeWindow
+  const [y, m, d] = datePart.split("-").map(Number);
+  if (!y || !m || !d) return null;
+  const date = new Date(y, m - 1, d);
+  if (Number.isNaN(date.getTime())) return null;
+  const tw = (timeWindow || "any").toLowerCase();
+  if (tw === "morning") {
+    date.setHours(10, 0, 0, 0);
+  } else if (tw === "afternoon") {
+    date.setHours(14, 0, 0, 0);
+  } else if (tw === "evening") {
+    date.setHours(17, 30, 0, 0);
+  } else {
+    date.setHours(12, 30, 0, 0); // noon as default for "any"
+  }
+  return date;
 }
 
 /** Format UK postcode for Google APIs: add space before inward code and append ", UK" */
@@ -298,8 +352,9 @@ async function calculatePricing(rawBody) {
 
   const distanceCharge = PER_MILE_RATE * miles;
 
+  const dateTime = buildDateTimeForCongestion(body.date, body.timeWindow);
   const congestionApplied =
-    isInCongestionZone(pickup) || isInCongestionZone(dropoff);
+    isCongestionZone(pickup, dateTime) || isCongestionZone(dropoff, dateTime);
   const congestionFee = congestionApplied ? CONGESTION_FEE : 0;
 
   let total = base + distanceCharge + congestionFee;
@@ -431,9 +486,12 @@ async function calculatePricingNew(body) {
   }
 
   const distanceCharge = NEW_PER_MILE * miles;
-  const pickupInLondon = isInLondonZones(lat1, lng1);
-  const dropoffInLondon = isInLondonZones(lat2, lng2);
-  const congestionApplied = pickupInLondon || dropoffInLondon;
+  const pickupPostcode = pickup.postcode ? cleanPostcode(pickup.postcode) : "";
+  const dropoffPostcode = dropoff.postcode ? cleanPostcode(dropoff.postcode) : "";
+  const dateTime = buildDateTimeForCongestion(body.date, body.timeWindow);
+  const congestionApplied =
+    (pickupPostcode && isCongestionZone(pickupPostcode, dateTime)) ||
+    (dropoffPostcode && isCongestionZone(dropoffPostcode, dateTime));
   const congestionFee = congestionApplied ? NEW_CONGESTION_FEE : 0;
 
   let total = NEW_BASE_FEE + distanceCharge + congestionFee;
