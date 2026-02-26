@@ -146,6 +146,17 @@ function isInCongestionZone(pc) {
   );
 }
 
+/** Format UK postcode for Google APIs: add space before inward code and append ", UK" */
+function formatPostcodeForGoogle(pc) {
+  const cleaned = cleanPostcode(pc);
+  if (!cleaned) return "";
+  // UK outward (e.g. SE6) + inward (e.g. 2BG) — insert space before last 3 chars if missing
+  if (cleaned.length >= 5 && cleaned.charAt(cleaned.length - 4) !== " ") {
+    return cleaned.slice(0, -3) + " " + cleaned.slice(-3) + ", UK";
+  }
+  return cleaned + ", UK";
+}
+
 function toDistanceLocation(postcode, coords) {
   const hasCoords =
     coords &&
@@ -158,8 +169,7 @@ function toDistanceLocation(postcode, coords) {
     return `${coords.lat},${coords.lng}`;
   }
 
-  const cleaned = cleanPostcode(postcode);
-  return cleaned;
+  return formatPostcodeForGoogle(postcode);
 }
 
 async function calculateDistanceMiles(

@@ -526,6 +526,15 @@ document.addEventListener("DOMContentLoaded", () => {
     if (dropoffFullAddressHidden) {
       dropoffFullAddressHidden.value = dropoffAddressStored || dropoffPostcodeStored;
     }
+
+    const pickupLatStored = sessionStorage.getItem("pickup_lat") || "";
+    const pickupLngStored = sessionStorage.getItem("pickup_lng") || "";
+    const dropoffLatStored = sessionStorage.getItem("dropoff_lat") || "";
+    const dropoffLngStored = sessionStorage.getItem("dropoff_lng") || "";
+    if (pickupLatHidden) pickupLatHidden.value = pickupLatStored;
+    if (pickupLngHidden) pickupLngHidden.value = pickupLngStored;
+    if (dropoffLatHidden) dropoffLatHidden.value = dropoffLatStored;
+    if (dropoffLngHidden) dropoffLngHidden.value = dropoffLngStored;
   } catch (err) {
     console.warn("Unable to read sessionStorage on details page", err);
   }
@@ -822,6 +831,10 @@ btnGetPrice?.addEventListener("click", async () => {
       sessionStorage.setItem("dropoffPostcode", payloadStep1.dropoff);
       sessionStorage.setItem("pickupAddress", pickupAddressStep1);
       sessionStorage.setItem("dropoffAddress", dropoffAddressStep1);
+      if (payloadStep1.pickupLat) sessionStorage.setItem("pickup_lat", payloadStep1.pickupLat);
+      if (payloadStep1.pickupLng) sessionStorage.setItem("pickup_lng", payloadStep1.pickupLng);
+      if (payloadStep1.dropoffLat) sessionStorage.setItem("dropoff_lat", payloadStep1.dropoffLat);
+      if (payloadStep1.dropoffLng) sessionStorage.setItem("dropoff_lng", payloadStep1.dropoffLng);
     } catch (err) {
       console.warn("Unable to persist to sessionStorage", err);
     }
