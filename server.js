@@ -484,17 +484,19 @@ async function calculatePricingNew(body) {
     (dropoffPostcode && isCongestionZone(dropoffPostcode));
   const congestionFee = congestionApplied ? CONGESTION_FEE : 0;
 
-  // Helper: only if explicitly selected in the payload
-  const helperSelected =
-    body.helper === true ||
-    body.helper === "true" ||
-    body.helper === "yes" ||
-    body.helper === "on" ||
-    body.helper === 1 ||
-    body.helper === "1";
-  const helperFee = helperSelected ? HELPER_FEE : 0;
+  // Helpers: 0, 1, or 2 — helpers * £30
+  const helpersCount = Math.min(2, Math.max(0, parseInt(body.helpers, 10) || 0));
+  const helperFee = helpersCount * HELPER_FEE;
 
-  let total = BASE_FEE + distanceCharge + congestionFee + helperFee;
+  // Stairs: if helpers >= 1 then stairs fee = 0; else £15 pickup + £15 dropoff when yes
+  const stairsPickup = body.stairsPickup === "yes" || body.stairsPickup === true;
+  const stairsDropoff = body.stairsDropoff === "yes" || body.stairsDropoff === true;
+  const STAIRS_FEE = 15;
+  const stairsPickupFee = helpersCount >= 1 ? 0 : (stairsPickup ? STAIRS_FEE : 0);
+  const stairsDropoffFee = helpersCount >= 1 ? 0 : (stairsDropoff ? STAIRS_FEE : 0);
+  const stairsTotal = stairsPickupFee + stairsDropoffFee;
+
+  let total = BASE_FEE + distanceCharge + congestionFee + helperFee + stairsTotal;
   if (!Number.isFinite(total)) {
     throw new Error("Calculated total is invalid.");
   }
@@ -513,7 +515,9 @@ async function calculatePricingNew(body) {
     `Base fee: £${BASE_FEE.toFixed(0)}`,
     `Distance cost: £${Math.round(distanceCharge).toFixed(0)}`,
     `Congestion: £${congestionFee.toFixed(0)}`,
-    `Helper: £${helperFee.toFixed(0)}`,
+    helperFee > 0 ? `Helpers (${helpersCount}): £${helperFee.toFixed(0)}` : null,
+    stairsPickupFee > 0 ? `Stairs pickup: £${stairsPickupFee.toFixed(0)}` : null,
+    stairsDropoffFee > 0 ? `Stairs dropoff: £${stairsDropoffFee.toFixed(0)}` : null,
     `Final total price: £${total.toFixed(0)}`,
   ].filter(Boolean);
 
@@ -527,6 +531,9 @@ async function calculatePricingNew(body) {
     perMile: PER_MILE_RATE,
     congestionApplied,
     congestionFee,
+    helperFee,
+    stairsPickupFee,
+    stairsDropoffFee,
     breakdown,
     note: "Pay the deposit now. Remaining balance is paid to the driver on the day.",
   };

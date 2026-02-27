@@ -35,7 +35,13 @@
               autocomplete="off"
               aria-describedby="pickup-hint"
             />
-            <span id="pickup-hint" class="field__hint">Start typing a UK postcode or address</span>
+            
+<input type="hidden" id="pickupLat" name="pickupLat">
+<input type="hidden" id="pickupLng" name="pickupLng">
+<input type="hidden" id="pickupPlaceId" name="pickupPlaceId">
+<input type="hidden" id="pickupPostcodeHidden" name="pickupPostcode">
+
+    <span id="pickup-hint" class="field__hint">Start typing a UK postcode or address</span>
             <span id="pickup-error" class="field__error" role="alert" aria-live="polite"></span>
           </div>
 
@@ -50,6 +56,11 @@
               autocomplete="off"
               aria-describedby="dropoff-hint"
             />
+            <input type="hidden" id="dropoffLat" name="dropoffLat">
+<input type="hidden" id="dropoffLng" name="dropoffLng">
+<input type="hidden" id="dropoffPlaceId" name="dropoffPlaceId">
+<input type="hidden" id="dropoffPostcodeHidden" name="dropoffPostcode">
+
             <span id="dropoff-hint" class="field__hint">Start typing a UK postcode or address</span>
             <span id="dropoff-error" class="field__error" role="alert" aria-live="polite"></span>
           </div>
@@ -58,25 +69,85 @@
         <div class="form__section">
           <h2 class="form__heading">Trip details</h2>
 
-          <div class="field">
-            <label class="field__label" for="serviceType">Service type</label>
-            <select id="serviceType" name="serviceType" class="field__input field__input--select">
-              <option value="standard">Standard</option>
-              <option value="express">Express</option>
-            </select>
-          </div>
+<!-- ITEMS TO BE COLLECTED -->
+<div class="field" id="itemsSection">
+  <label class="field__label" for="itemSelect">Items to be collected</label>
+
+  <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+    <select id="itemSelect" class="field__input" style="min-width:260px;">
+      <option value="" selected disabled>Select an item…</option>
+
+      <optgroup label="Furniture">
+        <option>Sofa (2–3 seater)</option>
+        <option>Corner sofa</option>
+        <option>Armchair</option>
+        <option>Dining table</option>
+        <option>Dining chairs</option>
+        <option>Bed frame</option>
+        <option>Mattress</option>
+        <option>Wardrobe</option>
+        <option>Chest of drawers</option>
+        <option>Desk</option>
+        <option>TV stand</option>
+      </optgroup>
+
+      <optgroup label="Appliances">
+        <option>Washing machine</option>
+        <option>Tumble dryer</option>
+        <option>Fridge</option>
+        <option>Freezer</option>
+        <option>Dishwasher</option>
+        <option>Oven</option>
+        <option>Microwave</option>
+      </optgroup>
+
+      <optgroup label="Boxes & misc">
+        <option>Boxes</option>
+        <option>Suitcases</option>
+        <option>Bags</option>
+        <option>Bike</option>
+        <option>TV</option>
+      </optgroup>
+    </select>
+
+    <button type="button" id="addSelectedItemBtn">Add item</button>
+  </div>
+
+  <div style="margin-top:12px;">
+    <label class="field__label" for="customItemInput">Add a custom item (if not listed)</label>
+    <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+      <input
+        id="customItemInput"
+        class="field__input"
+        type="text"
+        placeholder="e.g. Garden bench, 10 x books boxes"
+        style="min-width:260px;"
+      />
+      <button type="button" id="addCustomItemBtn">Add custom item</button>
+    </div>
+  </div>
+
+  <div style="margin-top:14px;">
+    <div class="field__label" style="margin-bottom:6px;">Selected items</div>
+    <div id="itemsListUI" style="display:flex; flex-direction:column; gap:8px;"></div>
+    <small style="opacity:0.8;">Add quantity for each item. Remove if added by mistake.</small>
+  </div>
+
+  <!-- This is what gets submitted to the server -->
+  <input type="hidden" id="itemsList" name="itemsList" value="[]"/>
+
+  <div id="itemsError" class="field__error" style="display:none;">
+    Please add at least one item.
+  </div>
+</div>
 
           <div class="field">
-            <label class="field__label" for="itemsCount">Number of items</label>
-            <input
-              id="itemsCount"
-              name="itemsCount"
-              type="number"
-              min="1"
-              max="999"
-              value="1"
-              class="field__input"
-            />
+            <label class="field__label" for="helpers">Helpers</label>
+            <select id="helpers" name="helpers" class="field__input field__input--select">
+              <option value="0" selected>0 Helpers</option>
+              <option value="1">1 Helper (+£30)</option>
+              <option value="2">2 Helpers (+£60)</option>
+            </select>
           </div>
 
           <div class="field field--row">

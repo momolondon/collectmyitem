@@ -225,15 +225,19 @@
   function buildPayload() {
     const pickup = state[PICKUP];
     const dropoff = state[DROPOFF];
-    const serviceType = (el.form.querySelector('[name="serviceType"]') || {}).value || "standard";
-    const itemsCount = parseInt(
-      (el.form.querySelector('[name="itemsCount"]') || {}).value,
-      10
-    ) || 1;
+    const helpersEl = el.form.querySelector('[name="helpers"]');
+    const helpers = parseInt(helpersEl ? helpersEl.value : "0", 10) || 0;
     const stairsPickup = (el.form.querySelector('[name="stairsPickup"]:checked') || {}).value || "no";
     const stairsDropoff = (el.form.querySelector('[name="stairsDropoff"]:checked') || {}).value || "no";
     const date = (el.form.querySelector('[name="date"]') || {}).value || "";
     const timeWindow = (el.form.querySelector('[name="timeWindow"]') || {}).value || "any";
+    const itemsListEl = document.getElementById("itemsList");
+    let items = [];
+    try {
+      if (itemsListEl && itemsListEl.value) {
+        items = JSON.parse(itemsListEl.value);
+      }
+    } catch (_) {}
 
     return {
       pickup: {
@@ -250,8 +254,8 @@
         lng: dropoff.lng,
         placeId: dropoff.placeId,
       },
-      serviceType,
-      itemsCount,
+      items,
+      helpers,
       stairsPickup,
       stairsDropoff,
       date,
@@ -395,4 +399,121 @@
     .catch(function () {
       setApiError("Could not load map settings. Check that the server is running and GOOGLE_MAPS_API_KEY is set.");
     });
+})();
+(() => {
+  const itemSelect = document.getElementById("itemSelect");
+  const addSelectedBtn = document.getElementById("addSelectedItemBtn");
+  const customInput = document.getElementById("customItemInput");
+  const addCustomBtn = document.getElementById("addCustomItemBtn");
+  const itemsListUI = document.getElementById("itemsListUI");
+  const itemsHidden = document.getElementById("itemsList");
+  const itemsError = document.getElementById("itemsError");
+
+  // Internal state: [{ name: "Sofa", qty: 1 }]
+  let items = [];
+
+  function normalizeName(s) {
+    return String(s || "").trim().replace(/\s+/g, " ");
+  }
+
+  function findIndexByName(name) {
+    const n = name.toLowerCase();
+    return items.findIndex(i => i.name.toLowerCase() === n);
+  }
+
+  function syncHidden() {
+    itemsHidden.value = JSON.stringify(items);
+  }
+
+  function render() {
+    itemsListUI.innerHTML = "";
+
+    items.forEach((item, idx) => {
+      const row = document.createElement("div");
+      row.style.display = "flex";
+      row.style.gap = "10px";
+      row.style.alignItems = "center";
+      row.style.flexWrap = "wrap";
+
+      const label = document.createElement("div");
+      label.textContent = item.name;
+      label.style.minWidth = "240px";
+
+      const qty = document.createElement("input");
+      qty.type = "number";
+      qty.min = "1";
+      qty.step = "1";
+      qty.value = String(item.qty || 1);
+      qty.style.width = "90px";
+      qty.addEventListener("input", () => {
+        const v = parseInt(qty.value, 10);
+        items[idx].qty = Number.isFinite(v) && v > 0 ? v : 1;
+        syncHidden();
+      });
+
+      const removeBtn = document.createElement("button");
+      removeBtn.type = "button";
+      removeBtn.textContent = "Remove";
+      removeBtn.addEventListener("click", () => {
+        items.splice(idx, 1);
+        syncHidden();
+        render();
+      });
+
+      row.appendChild(label);
+      row.appendChild(qty);
+      row.appendChild(removeBtn);
+
+      itemsListUI.appendChild(row);
+    });
+
+    syncHidden();
+  }
+
+  function addItem(name) {
+    const clean = normalizeName(name);
+    if (!clean) return;
+
+    const existingIdx = findIndexByName(clean);
+    if (existingIdx >= 0) {
+      // If already exists, just increment qty
+      items[existingIdx].qty = (items[existingIdx].qty || 1) + 1;
+    } else {
+      items.push({ name: clean, qty: 1 });
+    }
+    itemsError.style.display = "none";
+    render();
+  }
+
+  addSelectedBtn?.addEventListener("click", () => {
+    addItem(itemSelect.value);
+    // Optional: reset select
+    itemSelect.selectedIndex = 0;
+  });
+
+  addCustomBtn?.addEventListener("click", () => {
+    addItem(customInput.value);
+    customInput.value = "";
+    customInput.focus();
+  });
+
+  customInput?.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      addCustomBtn.click();
+    }
+  });
+
+  // OPTIONAL: If you want "required" behaviour on submit
+  const form = itemsHidden.closest("form");
+  form?.addEventListener("submit", (e) => {
+    if (!items.length) {
+      e.preventDefault();
+      itemsError.style.display = "block";
+      itemsError.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  });
+
+  // Init
+  render();
 })();
