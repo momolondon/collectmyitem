@@ -1,5 +1,39 @@
 /* new-form.css — base style adapted to project classes */
 
+body {
+  background: #f6f1e7;
+  transition: background 3s ease;
+}
+/* Dark overlay */
+.page-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(20, 20, 20, 0.55);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 3s ease;
+  z-index: 1;
+}
+/* Active state after page load */
+.page-loaded .page-overlay {
+  opacity: 1;
+}
+/* Form card animation */
+.pricing-form-card {
+  opacity: 0;
+  transform: translateY(40px) scale(0.98);
+  transition:
+    opacity 0.9s ease,
+    transform 0.9s ease;
+  transition-delay: 0.4s;
+  position: relative;
+  z-index: 2;
+}
+.page-loaded .pricing-form-card {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
 /* Base theme tokens */
 :root {
   --bg: #fbf5e8;

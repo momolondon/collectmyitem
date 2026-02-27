@@ -5,9 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Get a price — Collect My Item</title>
   <meta name="description" content="Enter pickup and dropoff to get an instant fixed price. UK postcode or full address." />
-  <link rel="stylesheet" href="new-form.css" />
+  <link rel="stylesheet" href="css/new-form.css" />
 </head>
 <body>
+  <div class="page-overlay"></div>
   <div class="page">
     <header class="header">
       <div class="container">
@@ -16,7 +17,7 @@
       </div>
     </header>
 
-    <main class="main container">
+    <main class="main container pricing-form-card">
       <h1 class="title">Get an instant price</h1>
       <p class="subtitle">Enter UK postcode or full address for pickup and dropoff. We'll calculate distance and show your fixed price.</p>
 
@@ -219,5 +220,12 @@
   </div>
 
   <script src="new-form.js"></script>
+  <script>
+window.addEventListener("load", () => {
+  setTimeout(() => {
+    document.body.classList.add("page-loaded");
+  }, 100);
+});
+  </script>
 </body>
 </html>
