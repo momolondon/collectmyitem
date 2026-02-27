@@ -1,17 +1,20 @@
 /* new-form.css — standalone styles for the new pricing form */
 
 :root {
-  --color-bg: #fff8e7;
-  --color-surface: #fff;
+  --color-bg: #fef8e8;
+  --color-bg-warm: linear-gradient(160deg, #fef8e8 0%, #fcefc7 50%, #f5e6b3 100%);
+  --color-surface: #fffef9;
   --color-text: #1a1a1a;
   --color-text-muted: #5c5c5c;
-  --color-primary: #2563eb;
-  --color-primary-hover: #1d4ed8;
-  --color-border: #e5e7eb;
+  --color-primary: #c9a227;
+  --color-primary-hover: #b8921f;
+  --color-border: #e8d5a3;
+  --color-accent: #c9a227;
   --color-error: #b91c1c;
   --color-success: #15803d;
-  --radius: 8px;
+  --radius: 10px;
   --shadow: 0 1px 3px rgba(0,0,0,0.08);
+  --shadow-form: 0 8px 32px rgba(180, 140, 40, 0.15), 0 2px 8px rgba(0,0,0,0.06);
   --font-sans: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
 }
 
@@ -27,7 +30,8 @@ body {
   font-size: 16px;
   line-height: 1.5;
   color: var(--color-text);
-  background: var(--color-bg);
+  background: var(--color-bg-warm);
+  min-height: 100vh;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -48,7 +52,8 @@ body {
 .header {
   padding: 1rem 0;
   background: var(--color-surface);
-  border-bottom: 1px solid var(--color-border);
+  border-bottom: 2px solid var(--color-accent);
+  box-shadow: 0 1px 4px rgba(180, 140, 40, 0.1);
 }
 
 .header .container {
@@ -100,8 +105,9 @@ body {
 .form {
   background: var(--color-surface);
   border-radius: var(--radius);
-  box-shadow: var(--shadow);
-  padding: 1.5rem;
+  border: 3px solid var(--color-accent);
+  box-shadow: var(--shadow-form), inset 0 1px 0 rgba(255,255,255,0.6);
+  padding: 1.75rem;
   margin-bottom: 2rem;
 }
 
@@ -154,17 +160,17 @@ body {
   padding: 0.625rem 0.75rem;
   font-size: 1rem;
   font-family: inherit;
-  border: 1px solid var(--color-border);
+  border: 2px solid var(--color-border);
   border-radius: var(--radius);
-  background: var(--color-surface);
+  background: #fff;
   color: var(--color-text);
-  transition: border-color 0.15s;
+  transition: border-color 0.15s, box-shadow 0.15s;
 }
 
 .field__input:focus {
   outline: none;
   border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+  box-shadow: 0 0 0 3px rgba(201, 162, 39, 0.25);
 }
 
 .field__input::placeholder {
@@ -246,7 +252,8 @@ body {
 .result {
   background: var(--color-surface);
   border-radius: var(--radius);
-  box-shadow: var(--shadow);
+  border: 2px solid var(--color-accent);
+  box-shadow: var(--shadow-form);
   padding: 1.5rem;
   margin-bottom: 2rem;
 }
@@ -319,7 +326,8 @@ body {
 .footer {
   padding: 1.5rem 0;
   background: var(--color-surface);
-  border-top: 1px solid var(--color-border);
+  border-top: 2px solid var(--color-accent);
+  box-shadow: 0 -1px 4px rgba(180, 140, 40, 0.1);
   text-align: center;
   font-size: 0.875rem;
   color: var(--color-text-muted);

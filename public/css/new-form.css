@@ -1,0 +1,514 @@
+/* new-form.css — AnyVan-quality booking form styling */
+
+:root {
+  --color-bg: #fef8e8;
+  --color-bg-warm: linear-gradient(165deg, #fef8e8 0%, #fcefc7 45%, #f5e6b3 100%);
+  --color-surface: #fffef9;
+  --color-text: #0f172a;
+  --color-text-muted: #64748b;
+  --color-primary: #c9a227;
+  --color-primary-hover: #b8921f;
+  --color-primary-light: rgba(201, 162, 39, 0.18);
+  --color-border: #e8d5a3;
+  --color-border-focus: #c9a227;
+  --color-accent: #c9a227;
+  --color-error: #dc2626;
+  --color-error-bg: #fef2f2;
+  --color-success: #16a34a;
+  --radius: 10px;
+  --radius-sm: 6px;
+  --shadow-sm: 0 1px 4px rgba(180, 140, 40, 0.12);
+  --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.08), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -4px rgba(0, 0, 0, 0.05);
+  --shadow-form: 0 8px 32px rgba(180, 140, 40, 0.18), 0 2px 12px rgba(0, 0, 0, 0.06);
+  --font-sans: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --space-xs: 0.25rem;
+  --space-sm: 0.5rem;
+  --space-md: 1rem;
+  --space-lg: 1.5rem;
+  --space-xl: 2rem;
+  --space-2xl: 2.5rem;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--color-text);
+  background: var(--color-bg-warm);
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+
+.page {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Form container: max-width to prevent autocomplete widening */
+.container {
+  width: 100%;
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 0 1.25rem;
+}
+
+.main.container {
+  max-width: 640px;
+}
+
+/* ========== Header ========== */
+.header {
+  padding: 1rem 0;
+  background: var(--color-surface);
+  border-bottom: 2px solid var(--color-accent);
+  box-shadow: var(--shadow-sm);
+}
+
+.header .container {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.brand {
+  font-weight: 700;
+  font-size: 1.25rem;
+  color: var(--color-text);
+  text-decoration: none;
+  letter-spacing: -0.02em;
+}
+
+.brand:hover {
+  color: var(--color-primary);
+}
+
+.link {
+  color: var(--color-primary);
+  text-decoration: none;
+  font-size: 0.9375rem;
+  font-weight: 500;
+}
+
+.link:hover {
+  text-decoration: underline;
+}
+
+/* ========== Main / Typography hierarchy ========== */
+.main {
+  flex: 1;
+  padding: 2rem 0 3rem;
+}
+
+.title {
+  margin: 0 0 0.5rem;
+  font-size: 1.875rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.3;
+}
+
+.subtitle {
+  margin: 0 0 2rem;
+  color: var(--color-text-muted);
+  font-size: 1rem;
+  line-height: 1.6;
+}
+
+/* ========== Form card ========== */
+.form {
+  background: var(--color-surface);
+  border-radius: var(--radius);
+  border: 3px solid var(--color-accent);
+  box-shadow: var(--shadow-form), inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  padding: var(--space-xl);
+  margin-bottom: var(--space-xl);
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.form__section {
+  margin-bottom: var(--space-xl);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-lg);
+}
+
+.form__section:last-of-type {
+  margin-bottom: 0;
+}
+
+.form__heading {
+  flex: 0 0 100%;
+  margin: 0 0 0;
+  padding-bottom: var(--space-sm);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+/* Two-column desktop layout; stack on mobile */
+@media (min-width: 600px) {
+  .form__section .field {
+    flex: 1 1 calc(50% - var(--space-lg) / 2);
+    min-width: 240px;
+  }
+}
+
+.form__section .field.field--row {
+  flex: 1 1 auto;
+}
+
+/* Items section spans full width */
+#itemsSection {
+  flex: 1 1 100%;
+  min-width: 100%;
+}
+
+/* ========== Fields ========== */
+.field {
+  margin-bottom: var(--space-lg);
+}
+
+.field:last-child {
+  margin-bottom: 0;
+}
+
+.field--row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-md);
+}
+
+.field--row .field__label {
+  margin-bottom: 0;
+  min-width: 120px;
+}
+
+.field__label {
+  display: block;
+  margin-bottom: var(--space-xs);
+  font-weight: 500;
+  font-size: 0.9375rem;
+}
+
+/* Inputs: full width, box-sizing to prevent layout shifting */
+.field__input,
+input.field__input,
+select.field__input {
+  width: 100%;
+  min-width: 0;
+  padding: 0.625rem 0.875rem;
+  font-size: 1rem;
+  font-family: inherit;
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.field__input:focus {
+  outline: none;
+  border-color: var(--color-border-focus);
+  box-shadow: 0 0 0 3px var(--color-primary-light);
+}
+
+.field__input::placeholder {
+  color: #94a3b8;
+}
+
+.field__input--select {
+  cursor: pointer;
+  appearance: auto;
+}
+
+.field__hint {
+  display: block;
+  margin-top: var(--space-xs);
+  font-size: 0.8125rem;
+  color: var(--color-text-muted);
+}
+
+.field__error {
+  display: block;
+  margin-top: var(--space-xs);
+  font-size: 0.8125rem;
+  color: var(--color-error);
+  font-weight: 500;
+}
+
+.field__group {
+  display: flex;
+  gap: var(--space-md);
+  flex-wrap: wrap;
+}
+
+.radio {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  cursor: pointer;
+  font-size: 0.9375rem;
+}
+
+.radio input {
+  margin: 0;
+}
+
+/* ========== Items section (select + add buttons) ========== */
+#itemsSection .field__input {
+  width: 100%;
+  min-width: 0;
+}
+
+#itemsSection [style*="display:flex"] {
+  display: flex !important;
+  flex-wrap: wrap;
+  gap: var(--space-md);
+  align-items: center;
+}
+
+#itemsSection select#itemSelect,
+#itemsSection #customItemInput {
+  flex: 1;
+  min-width: 200px;
+  width: auto;
+}
+
+#itemsSection [style*="margin-top"] {
+  margin-top: var(--space-md) !important;
+}
+
+/* Selected items list — tidy rows */
+#itemsListUI {
+  display: flex !important;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+#itemsListUI > div {
+  display: flex !important;
+  align-items: center;
+  gap: var(--space-md);
+  flex-wrap: wrap;
+  padding: var(--space-sm) var(--space-md);
+  background: var(--color-bg);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+}
+
+#itemsListUI > div > div:first-child {
+  flex: 1;
+  min-width: 0;
+  font-weight: 500;
+  font-size: 0.9375rem;
+}
+
+#itemsListUI > div input[type="number"] {
+  width: 4rem;
+  min-width: 4rem;
+  padding: 0.375rem 0.5rem;
+  font-size: 0.9375rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  text-align: center;
+}
+
+#itemsListUI > div button {
+  padding: 0.375rem 0.75rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  background: transparent;
+  color: var(--color-error);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+#itemsListUI > div button:hover {
+  background: var(--color-error-bg);
+  border-color: var(--color-error);
+}
+
+/* ========== Form actions / Buttons ========== */
+.form__actions {
+  margin-top: var(--space-xl);
+  padding-top: var(--space-lg);
+  border-top: 1px solid var(--color-border);
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.75rem 1.5rem;
+  font-size: 1rem;
+  font-weight: 600;
+  font-family: inherit;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background-color 0.2s, opacity 0.2s, transform 0.1s;
+}
+
+.btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.btn:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.btn--primary {
+  background: var(--color-primary);
+  color: #fff;
+}
+
+.btn--primary:hover:not(:disabled) {
+  background: var(--color-primary-hover);
+}
+
+/* Secondary buttons (Add item, Add custom item, Remove) */
+#addSelectedItemBtn,
+#addCustomItemBtn {
+  padding: 0.5rem 1rem;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  background: var(--color-primary);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 0.15s, opacity 0.15s;
+}
+
+#addSelectedItemBtn:hover,
+#addCustomItemBtn:hover {
+  background: var(--color-primary-hover);
+}
+
+/* ========== Result / Price box — summary card ========== */
+.result {
+  background: var(--color-surface);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-form);
+  padding: var(--space-xl);
+  margin-bottom: var(--space-xl);
+  border: 2px solid var(--color-accent);
+}
+
+.result[hidden] {
+  display: none !important;
+}
+
+.result__title {
+  margin: 0 0 var(--space-md);
+  font-size: 1.125rem;
+  font-weight: 600;
+}
+
+.result__content {
+  font-size: 0.9375rem;
+}
+
+.result__total {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 0.5rem 0 1rem;
+  color: var(--color-primary);
+}
+
+.result__breakdown {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--color-border);
+  padding-top: var(--space-md);
+}
+
+.result__breakdown li {
+  padding: 0.35rem 0;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.result__breakdown li:last-child {
+  border-bottom: none;
+}
+
+.result__note {
+  margin-top: var(--space-md);
+  padding-top: var(--space-md);
+  border-top: 1px solid var(--color-border);
+  font-size: 0.8125rem;
+  color: var(--color-text-muted);
+}
+
+/* ========== Error box — clear, not ugly ========== */
+.error-box {
+  background: var(--color-error-bg);
+  border: 1px solid #fecaca;
+  border-radius: var(--radius);
+  padding: var(--space-md);
+  color: var(--color-error);
+}
+
+.error-box[hidden] {
+  display: none !important;
+}
+
+.error-box p {
+  margin: 0;
+  font-size: 0.9375rem;
+}
+
+/* ========== Google Places Autocomplete — prevent layout widening ========== */
+.pac-container {
+  z-index: 99999 !important;
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-lg);
+  border: 1px solid var(--color-border);
+}
+
+/* ========== Footer ========== */
+.footer {
+  padding: var(--space-lg) 0;
+  background: var(--color-surface);
+  border-top: 2px solid var(--color-accent);
+  box-shadow: 0 -1px 4px rgba(180, 140, 40, 0.1);
+  text-align: center;
+  font-size: 0.875rem;
+  color: var(--color-text-muted);
+}
+
+.footer p {
+  margin: 0;
+}
+
+/* ========== Responsive — stack on mobile ========== */
+@media (max-width: 599px) {
+  .form {
+    padding: var(--space-lg);
+  }
+
+  .title {
+    font-size: 1.5rem;
+  }
+}
