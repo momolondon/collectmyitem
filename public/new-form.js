@@ -261,8 +261,6 @@
 
   function renderResult(data) {
     const total = data.total != null ? Number(data.total) : 0;
-    const deposit = data.deposit != null ? Number(data.deposit) : 0;
-    const remaining = data.remaining != null ? Number(data.remaining) : 0;
     const breakdown = data.breakdown || [];
     const note = data.note || "";
 
@@ -273,10 +271,9 @@
         breakdown.map(function (line) { return "<li>" + escapeHtml(line) + "</li>"; }).join("") +
         "</ul>";
     }
-    let noteHtml = note ? "<p class=\"result__note\">" + escapeHtml(note) + "</p>" : "";
+    var noteHtml = note ? "<p class=\"result__note\">" + escapeHtml(note) + "</p>" : "";
     return (
-      "<p class=\"result__total\">Total: £" + total.toFixed(2) + "</p>" +
-      "<p>Deposit (25%): £" + deposit.toFixed(2) + " · Balance on the day: £" + remaining.toFixed(2) + "</p>" +
+      "<p class=\"result__total\">Final total price: £" + total.toFixed(2) + "</p>" +
       breakdownHtml +
       noteHtml
     );

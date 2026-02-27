@@ -14,16 +14,22 @@ const BOOKINGS_FILE = path.join(__dirname, "bookings.json");
 const PUBLIC_DIR = path.join(__dirname, "public");
 const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
 
-// Pricing constants (legacy form)
-const PER_MILE_RATE = 2; // £ per mile
-const MIN_DEPOSIT = 25; // £
+// Unified pricing constants
+// Pricing model:
+// total =
+//   70 +
+//   (distance × 1.60) +
+//   (congestion ? 18 : 0) +
+//   (helper ? 30 : 0)
+const BASE_FEE = 70; // £
+const PER_MILE_RATE = 1.6; // £ per mile
 const CONGESTION_FEE = 18; // £ flat
+const HELPER_FEE = 30; // £ flat
+const MIN_TOTAL = 70; // Never allow total below £70
 
-// New pricing form constants
-const NEW_BASE_FEE = 35;
-const NEW_PER_MILE = 1.5;
-const NEW_CONGESTION_FEE = 18;
-const NEW_DEPOSIT_PERCENT = 0.25;
+// Deposit logic (used for legacy checkout + main site)
+const DEPOSIT_PERCENT = 0.25;
+const MIN_DEPOSIT = 25; // £
 const LONDON_CENTER_LAT = 51.5074;
 const LONDON_CENTER_LNG = -0.1278;
 const LONDON_ZONE_RADIUS_MILES = 17; // rough "zones 1-6" radius
@@ -178,13 +184,12 @@ function isWithinCongestionChargingHours(dateTime) {
 }
 
 /**
- * Returns true only if the postcode is in a congestion zone area AND the date/time
- * is within charging hours. If dateTime is not provided, returns false (no charge).
+ * Returns true if the postcode is in the congestion zone area list.
+ * Pricing rule: apply congestion only if pickup OR dropoff inside congestion zone.
+ * Time of day is ignored for pricing.
  */
-function isCongestionZone(postcode, dateTime) {
-  if (!isPostcodeInCongestionArea(postcode)) return false;
-  if (!dateTime) return false;
-  return isWithinCongestionChargingHours(dateTime);
+function isCongestionZone(postcode) {
+  return isPostcodeInCongestionArea(postcode);
 }
 
 /**
@@ -289,8 +294,6 @@ async function calculatePricing(rawBody) {
 
   const pickup = cleanPostcode(body.pickup);
   const dropoff = cleanPostcode(body.dropoff);
-  const serviceType = body.serviceType;
-  const houseSize = body.houseSize;
 
   if (!pickup || !dropoff) {
     throw new Error("Pickup and delivery postcodes are required.");
@@ -299,34 +302,13 @@ async function calculatePricing(rawBody) {
     throw new Error("Please enter valid UK postcodes for pickup and delivery.");
   }
 
-  if (!serviceType || !["man_van", "house_removal"].includes(serviceType)) {
+  // Service type is currently not used to change pricing, but we validate it for backwards compatibility.
+  const serviceType = body.serviceType || "man_van";
+  if (!["man_van", "house_removal"].includes(serviceType)) {
     throw new Error("Invalid service type. Please choose Man & Van or House Removal.");
   }
 
-  const houseRemovalBaseBySize = {
-    studio: 200,
-    "1_bed": 250,
-    "2_bed": 350,
-    "3_bed": 500,
-    "4_bed": 700,
-  };
-
-  let base = 0;
-  let minTotal = 0;
-  let serviceLabel = "";
-
-  if (serviceType === "man_van") {
-    base = 60; // £60 base
-    minTotal = 90; // minimum total
-    serviceLabel = "Man & Van";
-  } else {
-    if (!houseSize || !houseRemovalBaseBySize[houseSize]) {
-      throw new Error("Please select a valid property size for house removal.");
-    }
-    base = houseRemovalBaseBySize[houseSize];
-    minTotal = 250;
-    serviceLabel = "House Removal";
-  }
+  const serviceLabel = serviceType === "house_removal" ? "House Removal" : "Man & Van";
 
   const pickupLat = Number(body.pickupLat);
   const pickupLng = Number(body.pickupLng);
@@ -352,20 +334,30 @@ async function calculatePricing(rawBody) {
 
   const distanceCharge = PER_MILE_RATE * miles;
 
-  const dateTime = buildDateTimeForCongestion(body.date, body.timeWindow);
+  // Congestion charge: apply if pickup OR dropoff is inside congestion zone.
   const congestionApplied =
-    isCongestionZone(pickup, dateTime) || isCongestionZone(dropoff, dateTime);
+    (pickup && isCongestionZone(pickup)) || (dropoff && isCongestionZone(dropoff));
   const congestionFee = congestionApplied ? CONGESTION_FEE : 0;
 
-  let total = base + distanceCharge + congestionFee;
+  // Helper: only if explicitly selected in the payload
+  const helperSelected =
+    body.helper === true ||
+    body.helper === "true" ||
+    body.helper === "yes" ||
+    body.helper === "on" ||
+    body.helper === 1 ||
+    body.helper === "1";
+  const helperFee = helperSelected ? HELPER_FEE : 0;
+
+  let total = BASE_FEE + distanceCharge + congestionFee + helperFee;
   if (!Number.isFinite(total)) {
     throw new Error("Calculated total is invalid.");
   }
 
-  // Minimum totals for each service type
-  total = Math.max(minTotal, Math.round(total));
+  // Never allow total below minimum
+  total = Math.max(MIN_TOTAL, Math.round(total));
 
-  let deposit = total * 0.25;
+  let deposit = total * DEPOSIT_PERCENT;
   if (!Number.isFinite(deposit)) {
     throw new Error("Calculated deposit is invalid.");
   }
@@ -375,15 +367,11 @@ async function calculatePricing(rawBody) {
   const remaining = total - deposit;
 
   const breakdown = [
-    `Service — ${serviceLabel}`,
-    `Base — £${base.toFixed(0)}`,
-    `Distance — £${Math.round(distanceCharge)} (${miles.toFixed(
-      1
-    )} miles @ £${PER_MILE_RATE}/mile)`,
-    congestionApplied ? `Congestion Charge — £${CONGESTION_FEE}` : null,
-    `Total — £${total.toFixed(0)}`,
-    `Deposit today (25%) — £${deposit.toFixed(0)}`,
-    `Remaining balance — £${remaining.toFixed(0)}`,
+    `Base fee: £${BASE_FEE.toFixed(0)}`,
+    `Distance cost: £${Math.round(distanceCharge).toFixed(0)}`,
+    `Congestion: £${congestionFee.toFixed(0)}`,
+    `Helper: £${helperFee.toFixed(0)}`,
+    `Final total price: £${total.toFixed(0)}`,
   ].filter(Boolean);
 
   return {
@@ -392,7 +380,7 @@ async function calculatePricing(rawBody) {
     remaining,
     miles: Math.round(miles * 10) / 10,
     distanceCharge: Math.round(distanceCharge),
-    base,
+    base: BASE_FEE,
     perMile: PER_MILE_RATE,
     congestionApplied,
     congestionFee,
@@ -485,39 +473,60 @@ async function calculatePricingNew(body) {
     console.error("Distance Matrix failed, using 0 miles:", err.message);
   }
 
-  const distanceCharge = NEW_PER_MILE * miles;
+  const distanceCharge = PER_MILE_RATE * miles;
+
   const pickupPostcode = pickup.postcode ? cleanPostcode(pickup.postcode) : "";
   const dropoffPostcode = dropoff.postcode ? cleanPostcode(dropoff.postcode) : "";
-  const dateTime = buildDateTimeForCongestion(body.date, body.timeWindow);
-  const congestionApplied =
-    (pickupPostcode && isCongestionZone(pickupPostcode, dateTime)) ||
-    (dropoffPostcode && isCongestionZone(dropoffPostcode, dateTime));
-  const congestionFee = congestionApplied ? NEW_CONGESTION_FEE : 0;
 
-  let total = NEW_BASE_FEE + distanceCharge + congestionFee;
-  total = Math.round(total);
-  const deposit = Math.round(total * NEW_DEPOSIT_PERCENT);
+  // Congestion: apply only if pickup OR dropoff inside congestion zone
+  const congestionApplied =
+    (pickupPostcode && isCongestionZone(pickupPostcode)) ||
+    (dropoffPostcode && isCongestionZone(dropoffPostcode));
+  const congestionFee = congestionApplied ? CONGESTION_FEE : 0;
+
+  // Helper: only if explicitly selected in the payload
+  const helperSelected =
+    body.helper === true ||
+    body.helper === "true" ||
+    body.helper === "yes" ||
+    body.helper === "on" ||
+    body.helper === 1 ||
+    body.helper === "1";
+  const helperFee = helperSelected ? HELPER_FEE : 0;
+
+  let total = BASE_FEE + distanceCharge + congestionFee + helperFee;
+  if (!Number.isFinite(total)) {
+    throw new Error("Calculated total is invalid.");
+  }
+
+  total = Math.max(MIN_TOTAL, Math.round(total));
+  let deposit = total * DEPOSIT_PERCENT;
+  if (!Number.isFinite(deposit)) {
+    throw new Error("Calculated deposit is invalid.");
+  }
+  deposit = Math.max(MIN_DEPOSIT, deposit);
+  deposit = Math.round(deposit);
+
   const remaining = total - deposit;
 
   const breakdown = [
-    `Base fee — £${NEW_BASE_FEE}`,
-    `Distance — £${distanceCharge.toFixed(2)} (${miles.toFixed(1)} miles @ £${NEW_PER_MILE}/mile)`,
-    congestionApplied ? `Congestion charge (London) — £${NEW_CONGESTION_FEE}` : null,
-    `Total — £${total}`,
-    `Deposit (25%) — £${deposit}`,
-    `Remaining balance — £${remaining}`,
+    `Base fee: £${BASE_FEE.toFixed(0)}`,
+    `Distance cost: £${Math.round(distanceCharge).toFixed(0)}`,
+    `Congestion: £${congestionFee.toFixed(0)}`,
+    `Helper: £${helperFee.toFixed(0)}`,
+    `Final total price: £${total.toFixed(0)}`,
   ].filter(Boolean);
 
   return {
     total,
     deposit,
     remaining,
-    miles,
-    distanceCharge: Math.round(distanceCharge * 100) / 100,
-    baseFee: NEW_BASE_FEE,
-    perMile: NEW_PER_MILE,
+    miles: Math.round(miles * 10) / 10,
+    distanceCharge: Math.round(distanceCharge),
+    baseFee: BASE_FEE,
+    perMile: PER_MILE_RATE,
     congestionApplied,
-    congestionFee: congestionApplied ? NEW_CONGESTION_FEE : 0,
+    congestionFee,
     breakdown,
     note: "Pay the deposit now. Remaining balance is paid to the driver on the day.",
   };
