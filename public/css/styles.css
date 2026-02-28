@@ -3,6 +3,7 @@
 html {
   height: 100%;
   overflow-x: hidden;
+  -webkit-text-size-adjust: 100%;
 }
 body {
   margin: 0;
@@ -13,6 +14,7 @@ body {
   background: var(--bg);
   color: #fff;
   overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
 }
 img {
   max-width: 100%;
@@ -75,13 +77,18 @@ img {
   position: sticky;
   top: 0;
   z-index: 50;
-  height: 80px;
+  height: 85px;
   padding: 0 20px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: #0f172a;
+  gap: 12px;
+  background: rgba(15, 23, 42, 0.35);
+  backdrop-filter: blur(12px);
   border-bottom: 1px solid rgba(255,255,255,.16);
+}
+.header::before {
+  opacity: 0.95;
 }
 .header * {
   margin-top: 0;
@@ -99,22 +106,27 @@ img {
 .brand{
   display: flex;
   align-items: center;
+  gap: 10px;
   text-decoration: none;
   color: #fff;
-  flex-shrink: 0;
+  flex-shrink: 1;
+  min-width: 0;
 }
 .brand__logo{
-  height: 50px;
+  height: 56px;
   width: auto;
-  display: block;
+  max-height: 56px;
+  max-width: 100%;
   object-fit: contain;
+  object-position: left center;
+  display: block;
 }
 
 /* nav */
 .nav{
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
 }
 .nav a{
   color: rgba(255,255,255,.92);
@@ -525,28 +537,36 @@ label{
   .container { width: min(1120px, calc(100% - 32px)); padding: 0 16px; }
 }
 
+/* Tablet (768px and below) */
 @media (max-width: 768px) {
   .hero__grid { grid-template-columns: 1fr; }
   .hero__right { position: static; top: auto; }
   .trust { grid-template-columns: 1fr 1fr; }
   .steps { grid-template-columns: 1fr; }
   .form__row { grid-template-columns: 1fr; }
-  .contactGrid { grid-template-columns: 1fr; }
   .ctaStrip { flex-direction: column; align-items: flex-start; }
-  /* Stack header nav on small tablets */
-  .header { height: 65px; padding: 0 16px; }
+  /* Compact header — height: auto so content can wrap */
+  .header { height: auto; padding: 10px 14px; flex-wrap: wrap; }
   .header__inner { flex-direction: row; }
-  .brand__logo { height: 38px; }
-  .nav { flex-wrap: wrap; }
+  .brand__logo { height: 44px; max-height: 44px; max-width: 180px; }
+  .nav { width: 100%; justify-content: flex-end; flex-wrap: wrap; gap: 8px; }
 }
 
+/* Mobile (480px and below) */
 @media (max-width: 480px) {
   .container { width: min(100%, calc(100% - 24px)); padding: 0 12px; }
   .trust { grid-template-columns: 1fr; }
-  .header__inner { flex-direction: column; align-items: flex-start; }
-  .nav { width: 100%; flex-direction: column; align-items: stretch; }
-  .nav a { padding: 12px; min-height: 44px; display: flex; align-items: center; }
-  .brand__logo { height: 36px; max-width: 150px; }
+  .header { padding: 8px 12px; }
+  .header__inner { flex-direction: row; flex-wrap: wrap; align-items: center; }
+  .nav { width: 100%; justify-content: space-between; flex-wrap: wrap; }
+  .nav a { padding: 8px 10px; font-size: 14px; min-height: 44px; display: flex; align-items: center; white-space: normal; }
+  .brand__logo { height: 38px; max-height: 38px; max-width: 160px; }
+}
+
+/* Very small phones (360px and below) */
+@media (max-width: 360px) {
+  .header { padding: 8px 10px; }
+  .brand__logo { height: 34px; max-height: 34px; max-width: 130px; }
 }
 
 @media (min-width: 1024px) {
@@ -610,6 +630,17 @@ label{
   color: rgba(255,255,255,.92);
 }
 
+/* Contact section: stack cards vertically on mobile */
+@media (max-width: 768px) {
+  .contactGrid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  .contactCard {
+    width: 100%;
+  }
+}
+
 .is-show { animation: fadeUp .25s ease both; }
 .is-hidden { animation: fadeOut .2s ease both; }
 
@@ -622,4 +653,69 @@ label{
   to{ opacity:0; transform: translateY(6px); }
 }
 
+/* ===== Mobile header (≤768px): logo + 2-col nav grid ===== */
+@media (max-width: 768px) {
+  /* Header container */
+  header, .header, .header--premium {
+    height: auto !important;
+    padding: 10px 12px !important;
+  }
+
+  /* Make header content stack */
+  header .container,
+  .header .container,
+  .header--premium .container {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 10px !important;
+  }
+
+  /* Brand/logo row */
+  .brand {
+    display: flex !important;
+    align-items: center !important;
+    width: 100% !important;
+  }
+
+  /* Logo sizing (mobile) */
+  .brand__logo {
+    height: 44px !important;
+    width: auto !important;
+    object-fit: contain !important;
+    display: block !important;
+  }
+
+  /* Nav becomes a 2-column grid */
+  nav, .nav, .nav--premium {
+    width: 100% !important;
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 10px !important;
+    justify-items: stretch !important;
+    align-items: center !important;
+  }
+
+  /* Hide divider in grid layout */
+  nav .nav__divider, .nav .nav__divider {
+    display: none !important;
+  }
+
+  /* Make each nav link/button fill its grid cell */
+  nav a, nav button,
+  .nav a, .nav button,
+  .nav--premium a, .nav--premium button {
+    width: 100% !important;
+    text-align: center !important;
+    white-space: nowrap !important;
+    padding: 10px 12px !important;
+    font-size: 14px !important;
+  }
+
+  /* If "How it works" is longer, allow it to wrap nicely */
+  nav a:first-child {
+    white-space: normal !important;
+    line-height: 1.1 !important;
+  }
+}
 

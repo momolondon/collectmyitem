@@ -3,8 +3,8 @@
 
 /* Premium header (home page only) */
 .home-page .header--premium {
-  height: 70px;
-  padding: 0 20px;
+  height: 105px;
+  padding: 0 30px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.12);
 }
 
@@ -19,10 +19,13 @@
 }
 
 .home-page .header--premium .brand__logo {
-  height: 50px;
+  height: 56px;
+  max-height: 56px;
   width: auto;
+  max-width: 100%;
   display: block;
   object-fit: contain;
+  object-position: left center;
 }
 
 .home-page .header--premium .nav--premium {
@@ -133,6 +136,26 @@
   font-size: 14px;
 }
 
+/* Hero: prevent overlap, responsive typography */
+.home-page .hero {
+  padding-top: 24px;
+}
+.home-page .hero .pill {
+  max-width: 100%;
+  white-space: normal;
+  line-height: 1.2;
+  margin-bottom: 10px;
+}
+.home-page .hero h1 {
+  font-size: clamp(28px, 5vw, 56px);
+  line-height: 1.05;
+  margin: 10px 0 10px;
+}
+.home-page .hero .lead,
+.home-page .hero .helper {
+  font-size: clamp(14px, 2.2vw, 18px);
+}
+
 /* Section subtitles on dark background - warm cream for readability */
 .home-page .section--light .section__head .muted {
   color: #fef9e7;
@@ -143,41 +166,74 @@
   color: #fef9e7;
 }
 
-/* ===== Responsive — Breakpoints: 480px, 768px, 1024px ===== */
+/* ===== Responsive — Breakpoints: 360px, 480px, 768px, 1024px ===== */
+/* Tablet (768px and below) */
 @media (max-width: 768px) {
   .home-page .trust {
     grid-template-columns: 1fr;
   }
 
   .home-page .header--premium {
-    height: 65px;
-    padding: 0 16px;
+    height: auto;
+    padding: 10px 14px;
+    flex-wrap: wrap;
   }
 
   .home-page .header--premium .brand__logo {
-    height: 38px;
+    height: 44px;
+    max-height: 44px;
+    max-width: 180px;
   }
 
   .home-page .header--premium .nav--premium {
+    width: 100%;
+    justify-content: flex-end;
     flex-wrap: wrap;
+    gap: 8px;
   }
 
   .home-page .header--premium .nav__divider {
     display: none;
   }
+
+  .home-page .hero {
+    padding-top: 16px;
+  }
+
+  .home-page .hero .pill {
+    font-size: 13px;
+    padding: 8px 10px;
+  }
+
+  .home-page .hero h1 {
+    font-size: 34px;
+  }
 }
 
+/* Mobile (480px and below) */
 @media (max-width: 480px) {
+  .home-page .header--premium {
+    height: auto;
+    padding: 8px 12px;
+  }
+
+  .home-page .header--premium .brand__logo {
+    height: 38px;
+    max-height: 38px;
+    max-width: 160px;
+  }
+
   .home-page .header--premium .header__inner {
-    flex-direction: column;
-    align-items: flex-start;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
     gap: 12px;
   }
 
   .home-page .header--premium .nav--premium {
-    flex-direction: column;
     width: 100%;
-    align-items: stretch;
+    justify-content: space-between;
+    flex-wrap: wrap;
   }
 
   .home-page .header--premium .nav__link,
@@ -185,7 +241,8 @@
     min-height: 44px;
     display: flex;
     align-items: center;
-    padding: 12px 14px;
+    padding: 8px 10px;
+    font-size: 14px;
   }
 
   .home-page .hero__cta {
@@ -196,7 +253,99 @@
     width: 100%;
   }
 
-  .home-page h1 {
-    font-size: clamp(20px, 5vw, 28px);
+  .home-page .hero {
+    padding-top: 12px;
+  }
+
+  .home-page .hero .pill {
+    font-size: 12px;
+    margin-bottom: 10px;
+  }
+
+  .home-page .hero h1 {
+    font-size: 28px;
+  }
+}
+
+/* Very small phones (360px and below) */
+@media (max-width: 360px) {
+  .home-page .header--premium {
+    padding: 8px 10px;
+  }
+
+  .home-page .header--premium .brand__logo {
+    height: 34px;
+    max-height: 34px;
+    max-width: 130px;
+  }
+
+  .home-page .hero h1 {
+    font-size: clamp(24px, 5vw, 28px);
+  }
+}
+
+/* ===== Mobile header (≤768px): logo + 2-col nav grid ===== */
+@media (max-width: 768px) {
+  /* Header container */
+  header, .header, .header--premium {
+    height: auto !important;
+    padding: 10px 12px !important;
+  }
+
+  /* Make header content stack */
+  header .container,
+  .header .container,
+  .header--premium .container {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 10px !important;
+  }
+
+  /* Brand/logo row */
+  .brand {
+    display: flex !important;
+    align-items: center !important;
+    width: 100% !important;
+  }
+
+  /* Logo sizing (mobile) */
+  .brand__logo {
+    height: 44px !important;
+    width: auto !important;
+    object-fit: contain !important;
+    display: block !important;
+  }
+
+  /* Nav becomes a 2-column grid */
+  nav, .nav, .nav--premium {
+    width: 100% !important;
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 10px !important;
+    justify-items: stretch !important;
+    align-items: center !important;
+  }
+
+  /* Hide divider in grid layout */
+  nav .nav__divider, .nav .nav__divider {
+    display: none !important;
+  }
+
+  /* Make each nav link/button fill its grid cell */
+  nav a, nav button,
+  .nav a, .nav button,
+  .nav--premium a, .nav--premium button {
+    width: 100% !important;
+    text-align: center !important;
+    white-space: nowrap !important;
+    padding: 10px 12px !important;
+    font-size: 14px !important;
+  }
+
+  /* If "How it works" is longer, allow it to wrap nicely */
+  nav a:first-child {
+    white-space: normal !important;
+    line-height: 1.1 !important;
   }
 }
