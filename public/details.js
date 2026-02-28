@@ -59,6 +59,14 @@
     return false;
   }
 
+  function getPickupDropoffPostcodes() {
+    const p = quote?.payload?.pickup;
+    const d = quote?.payload?.dropoff;
+    const pickup = typeof p === "string" ? p : (p?.postcode ?? "");
+    const dropoff = typeof d === "string" ? d : (d?.postcode ?? "");
+    return { pickup, dropoff };
+  }
+
   function validateForm() {
     const name = (el.customerName?.value || "").trim();
     const phone = (el.customerPhone?.value || "").trim();
@@ -76,6 +84,14 @@
       if (el.customerPhoneError) el.customerPhoneError.textContent = "Please enter a valid UK mobile number (e.g. 07700 900123).";
       el.customerPhone?.focus();
       return false;
+    }
+
+    if (typeof isValidPostcode === "function") {
+      const { pickup, dropoff } = getPickupDropoffPostcodes();
+      if (!isValidPostcode(pickup) || !isValidPostcode(dropoff)) {
+        showError("Please enter valid UK postcodes for pickup and delivery. Go back to the quote page to fix.");
+        return false;
+      }
     }
 
     return true;

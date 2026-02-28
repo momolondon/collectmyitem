@@ -35,23 +35,6 @@
     dropoffPostcodeHidden: document.getElementById("dropoffPostcodeHidden"),
   };
 
-  function cleanPostcode(str) {
-    return String(str || "").trim().toUpperCase().replace(/\s+/g, "");
-  }
-
-  function isValidUKPostcode(str) {
-    const s = cleanPostcode(str);
-    return /^[A-Z]{1,2}\d[A-Z0-9]?\d[A-Z]{2}$/.test(s);
-  }
-
-  function formatPostcodeForDisplay(pc) {
-    const s = cleanPostcode(pc);
-    if (s.length >= 5 && s.charAt(s.length - 4) !== " ") {
-      return s.slice(0, -3) + " " + s.slice(-3);
-    }
-    return s;
-  }
-
   function showError(field, message) {
     const errEl = field === PICKUP ? el.pickupError : el.dropoffError;
     if (errEl) errEl.textContent = message || "";

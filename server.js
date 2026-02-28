@@ -265,6 +265,12 @@ function cleanPostcode(pc) {
     .replace(/\s+/g, "");
 }
 
+/** Returns true if the string is a valid UK postcode format. */
+function isValidPostcode(pc) {
+  const s = cleanPostcode(pc);
+  return /^[A-Z]{1,2}\d[A-Z0-9]?\d[A-Z]{2}$/.test(s);
+}
+
 /**
  * London Congestion Charge: allowed postcode outward codes only.
  * Exact match only (e.g. SE1 in, SE12/SE13/etc out).
