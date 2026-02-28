@@ -29,6 +29,18 @@
     .badge--unpaid { background: #7f1d1d; color: #fca5a5; }
     .badge--pending { background: #78350f; color: #fcd34d; }
     .empty { text-align: center; padding: 48px; color: #64748b; }
+    .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 100; align-items: center; justify-content: center; padding: 20px; box-sizing: border-box; }
+    .modal.open { display: flex; }
+    .modal__inner { background: #1e293b; border-radius: 12px; max-width: 560px; width: 100%; max-height: 90vh; overflow-y: auto; padding: 24px; }
+    .modal__title { margin: 0 0 20px; font-size: 1.2rem; }
+    .modal__close { float: right; background: none; border: none; color: #94a3b8; cursor: pointer; font-size: 1.5rem; line-height: 1; padding: 0 4px; }
+    .modal__close:hover { color: #fff; }
+    .modal__section { margin-bottom: 16px; }
+    .modal__section:last-child { margin-bottom: 0; }
+    .modal__label { font-size: 0.8rem; color: #64748b; margin-bottom: 2px; }
+    .modal__value { font-size: 0.95rem; }
+    .modal__link { display: inline-block; margin-top: 16px; color: #3b82f6; text-decoration: none; font-size: 0.9rem; }
+    .modal__link:hover { text-decoration: underline; }
   </style>
 </head>
 <body>
@@ -74,6 +86,14 @@
           <tr><td colspan="12" class="empty">Loading…</td></tr>
         </tbody>
       </table>
+    </div>
+  </div>
+  <div id="viewModal" class="modal">
+    <div class="modal__inner">
+      <button type="button" class="modal__close" id="modalClose" aria-label="Close">&times;</button>
+      <h2 class="modal__title" id="modalTitle">Booking details</h2>
+      <div id="modalContent"></div>
+      <a href="#" id="modalFullLink" class="modal__link">View full booking page →</a>
     </div>
   </div>
   <script>
@@ -149,7 +169,7 @@
               "<td>" + fmt(b.remainingBalance) + "</td>" +
               "<td>" + statusBadge(b.status) + "</td>" +
               "<td>" + driverPaidBadge(b) + "</td>" +
-              '<td><a href="/admin/booking/' + encodeURIComponent(id) + '" class="btn btn--sm btn--ghost">View</a> ' + markBtn + "</td>" +
+              '<td><button type="button" class="btn btn--sm btn--ghost" data-id="' + id + '" data-action="view">View</button> ' + markBtn + "</td>" +
               "</tr>"
             );
           })
@@ -175,7 +195,76 @@
             }
           });
         });
+
+        tbody.querySelectorAll("[data-action=view]").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const id = btn.getAttribute("data-id");
+            if (!id) return;
+            showViewModal(id);
+          });
+        });
       }
+
+      function esc(s) {
+        if (s == null || s === "") return "—";
+        const d = document.createElement("div");
+        d.textContent = String(s);
+        return d.innerHTML;
+      }
+
+      function renderItems(b) {
+        const items = b.items;
+        if (Array.isArray(items) && items.length) {
+          return items.map((i) => (i.name || "Item") + " × " + (i.qty || 1)).join(", ");
+        }
+        const details = b.itemDetails;
+        const count = b.itemCount;
+        if (details) return details + (count ? " (count: " + count + ")" : "");
+        if (count) return count + " item(s)";
+        return "—";
+      }
+
+      async function showViewModal(id) {
+        const modal = document.getElementById("viewModal");
+        const content = document.getElementById("modalContent");
+        const title = document.getElementById("modalTitle");
+        const fullLink = document.getElementById("modalFullLink");
+        fullLink.href = "/admin/booking/" + encodeURIComponent(id);
+        content.innerHTML = '<div class="empty">Loading…</div>';
+        modal.classList.add("open");
+        try {
+          const r = await fetch("/api/admin/booking/" + encodeURIComponent(id));
+          if (!r.ok) throw new Error("Not found");
+          const b = await r.json();
+          const distanceMiles = b.miles != null ? Number(b.miles).toFixed(1) + " miles" : "—";
+          const stairsPickup = b.stairsPickup === "yes" ? "Yes" : "No";
+          const stairsDropoff = b.stairsDropoff === "yes" ? "Yes" : "No";
+          title.textContent = "Booking " + (b.bookingRef || b.id);
+          content.innerHTML =
+            '<div class="modal__section"><div class="modal__label">Customer name</div><div class="modal__value">' + esc(b.customerName || b.name) + "</div></div>" +
+            '<div class="modal__section"><div class="modal__label">Customer phone</div><div class="modal__value">' + esc(b.customerPhone || b.phone) + "</div></div>" +
+            '<div class="modal__section"><div class="modal__label">Customer email</div><div class="modal__value">' + esc(b.customerEmail || b.email) + "</div></div>" +
+            '<div class="modal__section"><div class="modal__label">Pickup address</div><div class="modal__value">' + esc(b.pickupAddress || b.pickup) + "</div></div>" +
+            '<div class="modal__section"><div class="modal__label">Dropoff address</div><div class="modal__value">' + esc(b.dropoffAddress || b.dropoff) + "</div></div>" +
+            '<div class="modal__section"><div class="modal__label">Items</div><div class="modal__value">' + esc(renderItems(b)) + "</div></div>" +
+            '<div class="modal__section"><div class="modal__label">Helpers</div><div class="modal__value">' + (b.helpers ?? b.helper ?? "0") + "</div></div>" +
+            '<div class="modal__section"><div class="modal__label">Stairs (pickup / dropoff)</div><div class="modal__value">' + stairsPickup + " / " + stairsDropoff + "</div></div>" +
+            '<div class="modal__section"><div class="modal__label">Distance</div><div class="modal__value">' + distanceMiles + "</div></div>" +
+            '<div class="modal__section"><div class="modal__label">Deposit paid</div><div class="modal__value">' + fmt(b.deposit) + "</div></div>" +
+            '<div class="modal__section"><div class="modal__label">Remaining balance</div><div class="modal__value">' + fmt(b.remainingBalance) + "</div></div>";
+        } catch (e) {
+          content.innerHTML = '<div class="error">Failed to load booking</div>';
+        }
+      }
+
+      document.getElementById("modalClose").addEventListener("click", () => {
+        document.getElementById("viewModal").classList.remove("open");
+      });
+      document.getElementById("viewModal").addEventListener("click", (e) => {
+        if (e.target === document.getElementById("viewModal")) {
+          document.getElementById("viewModal").classList.remove("open");
+        }
+      });
 
       load();
     })();

@@ -126,32 +126,33 @@
           const timeWindowLabels = { any: "Any time", morning: "Morning (8am–12pm)", afternoon: "Afternoon (12pm–5pm)", evening: "Evening (5pm–8pm)" };
           const tw = timeWindowLabels[b.timeWindow] || b.timeWindow || "—";
 
-          const isPaid = b.status === "paid_deposit" || b.status === "paid";
           const customerName = b.customerName || b.name || "";
           const customerPhone = b.customerPhone || b.phone || "";
           const customerEmail = b.customerEmail || b.email || "";
           const notes = b.notes || "";
-          const customerCard = isPaid
-            ? '<div class="card"><h2>Customer details</h2>' +
-              '<div class="row"><div class="label">Name</div><div class="value">' + esc(customerName) + "</div></div>" +
-              '<div class="row"><div class="label">Phone</div><div class="value">' + esc(customerPhone) + "</div></div>" +
-              (customerEmail ? '<div class="row"><div class="label">Email</div><div class="value">' + esc(customerEmail) + "</div></div>" : "") +
-              (notes ? '<div class="row"><div class="label">Notes</div><div class="value">' + esc(notes) + "</div></div>" : "") +
-              "</div>"
-            : "";
+          const distanceMiles = b.miles != null ? (Number(b.miles).toFixed(1) + " miles") : "—";
+          const stairsPickup = b.stairsPickup === "yes" ? "Yes" : "No";
+          const stairsDropoff = b.stairsDropoff === "yes" ? "Yes" : "No";
+
+          const customerCard = '<div class="card"><h2>Customer details</h2>' +
+            '<div class="row"><div class="label">Name</div><div class="value">' + esc(customerName) + "</div></div>" +
+            '<div class="row"><div class="label">Phone</div><div class="value">' + esc(customerPhone) + "</div></div>" +
+            '<div class="row"><div class="label">Email</div><div class="value">' + esc(customerEmail) + "</div></div>" +
+            (notes ? '<div class="row"><div class="label">Notes</div><div class="value">' + esc(notes) + "</div></div>" : "") +
+            "</div>";
 
           content.innerHTML =
             '<h1>Booking ' + (b.bookingRef || b.id) + '</h1>' +
             customerCard +
             '<div class="card">' +
             '<h2>Addresses &amp; time</h2>' +
-            '<div class="row"><div class="label">Pickup</div><div class="value">' + (b.pickupAddress || b.pickup || "—") + "</div></div>" +
-            '<div class="row"><div class="label">Dropoff</div><div class="value">' + (b.dropoffAddress || b.dropoff || "—") + "</div></div>" +
+            '<div class="row"><div class="label">Pickup address</div><div class="value">' + esc(b.pickupAddress || b.pickup || "—") + "</div></div>" +
+            '<div class="row"><div class="label">Dropoff address</div><div class="value">' + esc(b.dropoffAddress || b.dropoff || "—") + "</div></div>" +
             '<div class="row"><div class="label">Date</div><div class="value">' + (b.date ? new Date(b.date).toLocaleDateString("en-GB", { weekday: "short", day: "2-digit", month: "short", year: "numeric" }) : "—") + "</div></div>" +
             '<div class="row"><div class="label">Time window</div><div class="value">' + tw + "</div></div>" +
+            '<div class="row"><div class="label">Distance</div><div class="value">' + distanceMiles + "</div></div>" +
             '<div class="row"><div class="label">Helpers</div><div class="value">' + (b.helpers ?? b.helper ?? "0") + "</div></div>" +
-            '<div class="row"><div class="label">Stairs pickup</div><div class="value">' + (b.stairsPickup === "yes" ? "Yes" : "No") + "</div></div>" +
-            '<div class="row"><div class="label">Stairs dropoff</div><div class="value">' + (b.stairsDropoff === "yes" ? "Yes" : "No") + "</div></div>" +
+            '<div class="row"><div class="label">Stairs (pickup / dropoff)</div><div class="value">' + stairsPickup + " / " + stairsDropoff + "</div></div>" +
             "</div>" +
             '<div class="card">' +
             '<h2>Items</h2>' +
@@ -162,8 +163,13 @@
             breakdownHtml +
             "</div>" +
             '<div class="card">' +
-            '<h2>Platform &amp; driver</h2>' +
+            '<h2>Payment</h2>' +
             '<div class="row"><div class="label">Customer price</div><div class="value">' + fmt(b.customerPrice) + "</div></div>" +
+            '<div class="row"><div class="label">Deposit paid</div><div class="value">' + fmt(b.deposit) + "</div></div>" +
+            '<div class="row"><div class="label">Remaining balance</div><div class="value">' + fmt(b.remainingBalance) + "</div></div>" +
+            "</div>" +
+            '<div class="card">' +
+            '<h2>Platform &amp; driver</h2>' +
             '<div class="row"><div class="label">Platform profit</div><div class="value">' + fmt(b.platformProfit) + "</div></div>" +
             '<div class="row"><div class="label">Driver payout</div><div class="value">' + fmt(b.driverPayout) + "</div></div>" +
             '<div class="row"><div class="label">Driver paid</div><div class="value">' + (b.driverPaid ? '<span class="badge badge--paid">Yes</span> ' + formatDate(b.driverPaidAt) : '<span class="badge badge--unpaid">No</span>') + "</div></div>" +
