@@ -21,11 +21,59 @@ const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
 //   (distance × 1.60) +
 //   (congestion ? 18 : 0) +
 //   (helper ? 30 : 0)
-const BASE_FEE = 70; // £
+const BASE_FEE = 35; // £
 const PER_MILE_RATE = 1.6; // £ per mile
 const CONGESTION_FEE = 18; // £ flat
 const HELPER_FEE = 30; // £ flat
+const BULKY_BAND_FEE = 25; // £ per 2-item band above first 2
 const MIN_TOTAL = 70; // Never allow total below £70
+
+// Bulky items: sofa, corner sofa, fridge, freezer, washing machine, tumble dryer,
+// dishwasher, wardrobe, mattress, bed frame, dining table, tv, oven, kitchen top,
+// doors, desk, armchair, motorbike
+const BULKY_ITEM_TERMS = [
+  "corner sofa", "sofa", "fridge", "freezer", "washing machine", "tumble dryer",
+  "dishwasher", "wardrobe", "mattress", "bed frame", "dining table", "tv",
+  "oven", "kitchen top", "doors", "desk", "armchair", "motorbike",
+];
+
+function countBulkyUnits(items) {
+  if (!Array.isArray(items)) return 0;
+  let units = 0;
+  for (const item of items) {
+    const name = String(item?.name || "").toLowerCase();
+    const qty = Math.max(0, parseInt(item?.qty, 10) || 1);
+    const isBulky = BULKY_ITEM_TERMS.some((term) => name.includes(term));
+    if (isBulky) units += qty;
+  }
+  return units;
+}
+
+function calcBulkyCharge(bulkyUnits) {
+  return bulkyUnits <= 2 ? 0 : Math.ceil((bulkyUnits - 2) / 2) * BULKY_BAND_FEE;
+}
+
+// Box charge: first 5 free, then £5 per extra box
+const BOX_FREE_LIMIT = 5;
+const BOX_EXTRA_FEE = 5; // £ per box above limit
+
+const BOX_ITEM_TERMS = ["box", "boxes", "carton"];
+
+function countBoxUnits(items) {
+  if (!Array.isArray(items)) return 0;
+  let units = 0;
+  for (const item of items) {
+    const name = String(item?.name || "").toLowerCase();
+    const qty = Math.max(0, parseInt(item?.qty, 10) || 1);
+    const isBox = BOX_ITEM_TERMS.some((term) => name.includes(term));
+    if (isBox) units += qty;
+  }
+  return units;
+}
+
+function calcBoxesFee(boxUnits) {
+  return boxUnits <= BOX_FREE_LIMIT ? 0 : (boxUnits - BOX_FREE_LIMIT) * BOX_EXTRA_FEE;
+}
 
 // Deposit logic (used for legacy checkout + main site)
 const DEPOSIT_PERCENT = 0.25;
@@ -140,26 +188,22 @@ function cleanPostcode(pc) {
     .replace(/\s+/g, "");
 }
 
-function isValidPostcode(pc) {
-  const s = cleanPostcode(pc);
-  // Basic UK postcode pattern (good enough for validation here)
-  return /^[A-Z]{1,2}\d[A-Z0-9]?\d[A-Z]{2}$/.test(s);
-}
-
 /**
- * London Congestion Charge: allowed postcode areas only.
- * Order matters: check longer prefixes (e.g. SE11) before shorter (SE1).
+ * London Congestion Charge: allowed postcode outward codes only.
+ * Exact match only (e.g. SE1 in, SE12/SE13/etc out).
  */
 const CONGESTION_ZONE_PREFIXES = [
   "WC1", "WC2", "EC1", "EC2", "EC3", "EC4",
   "W1", "SW1", "SE11", "SE1",
 ];
 
-/** Returns true if the postcode outward code is in the congestion zone area list. */
+/** Returns true if the postcode outward code is exactly in the congestion zone list. */
 function isPostcodeInCongestionArea(pc) {
   const s = cleanPostcode(pc);
   if (!s) return false;
-  return CONGESTION_ZONE_PREFIXES.some((prefix) => s.startsWith(prefix));
+  // Extract outward: full postcode has 3-char inward at end; short form is outward only
+  const outward = s.length >= 5 ? s.slice(0, -3) : s;
+  return CONGESTION_ZONE_PREFIXES.includes(outward);
 }
 
 /**
@@ -349,7 +393,13 @@ async function calculatePricing(rawBody) {
     body.helper === "1";
   const helperFee = helperSelected ? HELPER_FEE : 0;
 
-  let total = BASE_FEE + distanceCharge + congestionFee + helperFee;
+  const bulkyUnits = countBulkyUnits(body.items);
+  const bulkyCharge = calcBulkyCharge(bulkyUnits);
+
+  const boxUnits = countBoxUnits(body.items);
+  const boxesFee = calcBoxesFee(boxUnits);
+
+  let total = BASE_FEE + distanceCharge + congestionFee + helperFee + bulkyCharge + boxesFee;
   if (!Number.isFinite(total)) {
     throw new Error("Calculated total is invalid.");
   }
@@ -371,6 +421,8 @@ async function calculatePricing(rawBody) {
     `Distance cost: £${Math.round(distanceCharge).toFixed(0)}`,
     `Congestion: £${congestionFee.toFixed(0)}`,
     `Helper: £${helperFee.toFixed(0)}`,
+    bulkyCharge > 0 ? `Bulky items (${bulkyUnits}): £${bulkyCharge.toFixed(0)}` : null,
+    boxesFee > 0 ? `Boxes extra: £${boxesFee.toFixed(0)}` : null,
     `Final total price: £${total.toFixed(0)}`,
   ].filter(Boolean);
 
@@ -381,6 +433,7 @@ async function calculatePricing(rawBody) {
     miles: Math.round(miles * 10) / 10,
     distanceCharge: Math.round(distanceCharge),
     base: BASE_FEE,
+    boxesFee,
     perMile: PER_MILE_RATE,
     congestionApplied,
     congestionFee,
@@ -496,7 +549,13 @@ async function calculatePricingNew(body) {
   const stairsDropoffFee = helpersCount >= 1 ? 0 : (stairsDropoff ? STAIRS_FEE : 0);
   const stairsTotal = stairsPickupFee + stairsDropoffFee;
 
-  let total = BASE_FEE + distanceCharge + congestionFee + helperFee + stairsTotal;
+  const bulkyUnits = countBulkyUnits(body.items);
+  const bulkyCharge = calcBulkyCharge(bulkyUnits);
+
+  const boxUnits = countBoxUnits(body.items);
+  const boxesFee = calcBoxesFee(boxUnits);
+
+  let total = BASE_FEE + distanceCharge + congestionFee + helperFee + stairsTotal + bulkyCharge + boxesFee;
   if (!Number.isFinite(total)) {
     throw new Error("Calculated total is invalid.");
   }
@@ -518,6 +577,8 @@ async function calculatePricingNew(body) {
     helperFee > 0 ? `Helpers (${helpersCount}): £${helperFee.toFixed(0)}` : null,
     stairsPickupFee > 0 ? `Stairs pickup: £${stairsPickupFee.toFixed(0)}` : null,
     stairsDropoffFee > 0 ? `Stairs dropoff: £${stairsDropoffFee.toFixed(0)}` : null,
+    bulkyCharge > 0 ? `Bulky items (${bulkyUnits}): £${bulkyCharge.toFixed(0)}` : null,
+    boxesFee > 0 ? `Boxes extra: £${boxesFee.toFixed(0)}` : null,
     `Final total price: £${total.toFixed(0)}`,
   ].filter(Boolean);
 
@@ -528,6 +589,7 @@ async function calculatePricingNew(body) {
     miles: Math.round(miles * 10) / 10,
     distanceCharge: Math.round(distanceCharge),
     baseFee: BASE_FEE,
+    boxesFee,
     perMile: PER_MILE_RATE,
     congestionApplied,
     congestionFee,
