@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Booking — Admin — Collect My Item</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: system-ui, -apple-system, sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; }
+    .container { max-width: 720px; margin: 0 auto; padding: 20px; }
+    h1 { margin: 0 0 8px; font-size: 1.4rem; }
+    .back { display: inline-block; margin-bottom: 20px; color: #94a3b8; text-decoration: none; font-size: 0.9rem; }
+    .back:hover { color: #fff; }
+    .card { background: #1e293b; border-radius: 12px; padding: 24px; margin-bottom: 20px; }
+    .card h2 { margin: 0 0 16px; font-size: 1.1rem; color: #94a3b8; }
+    .row { margin-bottom: 12px; }
+    .row:last-child { margin-bottom: 0; }
+    .label { font-size: 0.85rem; color: #64748b; margin-bottom: 2px; }
+    .value { font-size: 1rem; }
+    .breakdown { list-style: none; padding: 0; margin: 0; }
+    .breakdown li { padding: 6px 0; border-bottom: 1px solid #334155; }
+    .breakdown li:last-child { border-bottom: none; font-weight: 600; }
+    .items { list-style: none; padding: 0; margin: 0; }
+    .items li { padding: 6px 0; border-bottom: 1px solid #334155; }
+    .items li:last-child { border-bottom: none; }
+    .btn { display: inline-block; padding: 10px 18px; border-radius: 8px; text-decoration: none; font-size: 1rem; cursor: pointer; border: none; }
+    .btn--primary { background: #3b82f6; color: #fff; }
+    .btn--primary:hover { background: #2563eb; }
+    .btn--primary:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn--ghost { background: transparent; color: #94a3b8; }
+    .btn--ghost:hover { color: #fff; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 0.8rem; }
+    .badge--paid { background: #065f46; color: #6ee7b7; }
+    .badge--unpaid { background: #7f1d1d; color: #fca5a5; }
+    .error { color: #f87171; padding: 20px; }
+    .loading { color: #64748b; padding: 40px; text-align: center; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <a href="/admin" class="back">← Back to Admin</a>
+    <div id="content">
+      <div class="loading">Loading…</div>
+    </div>
+  </div>
+  <script>
+    (function () {
+      const path = window.location.pathname;
+      const parts = path.split("/").filter(Boolean);
+      const id = parts[parts.length - 1];
+
+      const content = document.getElementById("content");
+
+      function fmt(v) {
+        const n = Number(v);
+        return Number.isFinite(n) ? "£" + n.toFixed(0) : "—";
+      }
+
+      function esc(s) {
+        if (s == null || s === "") return "—";
+        const d = document.createElement("div");
+        d.textContent = String(s);
+        return d.innerHTML;
+      }
+
+      function formatDate(s) {
+        if (!s) return "—";
+        try {
+          const d = new Date(s);
+          return isNaN(d.getTime()) ? s : d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+        } catch (_) { return s; }
+      }
+
+      function renderBreakdown(b) {
+        const lines = [];
+        const base = b.baseFee ?? b.base ?? 35;
+        const dist = b.distanceCharge ?? 0;
+        const cong = b.congestionFee ?? 0;
+        const helper = b.helperFee ?? 0;
+        const stairs = (b.stairsPickupFee ?? 0) + (b.stairsDropoffFee ?? 0);
+        const bulky = b.bulkyFee ?? b.bulkyCharge ?? 0;
+        const boxes = b.boxesFee ?? 0;
+        lines.push("Base: " + fmt(base));
+        if (dist) lines.push("Distance: " + fmt(dist));
+        if (cong) lines.push("Congestion: " + fmt(cong));
+        if (helper) lines.push("Helpers: " + fmt(helper));
+        if (stairs) lines.push("Stairs: " + fmt(stairs));
+        if (bulky) lines.push("Bulky items: " + fmt(bulky));
+        if (boxes) lines.push("Boxes extra: " + fmt(boxes));
+        lines.push("Total: " + fmt(b.customerPrice));
+        return lines.map((l) => "<li>" + l + "</li>").join("");
+      }
+
+      function renderItems(b) {
+        const items = b.items;
+        if (Array.isArray(items) && items.length) {
+          return items.map((i) => "<li>" + (i.name || "Item") + " × " + (i.qty || 1) + "</li>").join("");
+        }
+        const details = b.itemDetails;
+        const count = b.itemCount;
+        if (details) return "<li>" + details + (count ? " (count: " + count + ")" : "") + "</li>";
+        if (count) return "<li>" + count + " item(s)</li>";
+        return "<li>—</li>";
+      }
+
+      async function load() {
+        if (!id) {
+          content.innerHTML = '<div class="error">Invalid booking ID</div>';
+          return;
+        }
+        try {
+          const res = await fetch("/api/admin/booking/" + encodeURIComponent(id));
+          if (!res.ok) {
+            content.innerHTML = '<div class="error">Booking not found</div>';
+            return;
+          }
+          const b = await res.json();
+
+          let breakdownHtml = "";
+          if (b.breakdown && Array.isArray(b.breakdown)) {
+            breakdownHtml = "<ul class=\"breakdown\">" + b.breakdown.map((l) => "<li>" + l + "</li>").join("") + "</ul>";
+          } else {
+            breakdownHtml = "<ul class=\"breakdown\">" + renderBreakdown(b) + "</ul>";
+          }
+
+          const timeWindowLabels = { any: "Any time", morning: "Morning (8am–12pm)", afternoon: "Afternoon (12pm–5pm)", evening: "Evening (5pm–8pm)" };
+          const tw = timeWindowLabels[b.timeWindow] || b.timeWindow || "—";
+
+          const isPaid = b.status === "paid_deposit" || b.status === "paid";
+          const customerName = b.customerName || b.name || "";
+          const customerPhone = b.customerPhone || b.phone || "";
+          const customerEmail = b.customerEmail || b.email || "";
+          const notes = b.notes || "";
+          const customerCard = isPaid
+            ? '<div class="card"><h2>Customer details</h2>' +
+              '<div class="row"><div class="label">Name</div><div class="value">' + esc(customerName) + "</div></div>" +
+              '<div class="row"><div class="label">Phone</div><div class="value">' + esc(customerPhone) + "</div></div>" +
+              (customerEmail ? '<div class="row"><div class="label">Email</div><div class="value">' + esc(customerEmail) + "</div></div>" : "") +
+              (notes ? '<div class="row"><div class="label">Notes</div><div class="value">' + esc(notes) + "</div></div>" : "") +
+              "</div>"
+            : "";
+
+          content.innerHTML =
+            '<h1>Booking ' + (b.bookingRef || b.id) + '</h1>' +
+            customerCard +
+            '<div class="card">' +
+            '<h2>Addresses &amp; time</h2>' +
+            '<div class="row"><div class="label">Pickup</div><div class="value">' + (b.pickupAddress || b.pickup || "—") + "</div></div>" +
+            '<div class="row"><div class="label">Dropoff</div><div class="value">' + (b.dropoffAddress || b.dropoff || "—") + "</div></div>" +
+            '<div class="row"><div class="label">Date</div><div class="value">' + (b.date ? new Date(b.date).toLocaleDateString("en-GB", { weekday: "short", day: "2-digit", month: "short", year: "numeric" }) : "—") + "</div></div>" +
+            '<div class="row"><div class="label">Time window</div><div class="value">' + tw + "</div></div>" +
+            '<div class="row"><div class="label">Helpers</div><div class="value">' + (b.helpers ?? b.helper ?? "0") + "</div></div>" +
+            '<div class="row"><div class="label">Stairs pickup</div><div class="value">' + (b.stairsPickup === "yes" ? "Yes" : "No") + "</div></div>" +
+            '<div class="row"><div class="label">Stairs dropoff</div><div class="value">' + (b.stairsDropoff === "yes" ? "Yes" : "No") + "</div></div>" +
+            "</div>" +
+            '<div class="card">' +
+            '<h2>Items</h2>' +
+            '<ul class="items">' + renderItems(b) + "</ul>" +
+            "</div>" +
+            '<div class="card">' +
+            '<h2>Pricing breakdown</h2>' +
+            breakdownHtml +
+            "</div>" +
+            '<div class="card">' +
+            '<h2>Platform &amp; driver</h2>' +
+            '<div class="row"><div class="label">Customer price</div><div class="value">' + fmt(b.customerPrice) + "</div></div>" +
+            '<div class="row"><div class="label">Platform profit</div><div class="value">' + fmt(b.platformProfit) + "</div></div>" +
+            '<div class="row"><div class="label">Driver payout</div><div class="value">' + fmt(b.driverPayout) + "</div></div>" +
+            '<div class="row"><div class="label">Driver paid</div><div class="value">' + (b.driverPaid ? '<span class="badge badge--paid">Yes</span> ' + formatDate(b.driverPaidAt) : '<span class="badge badge--unpaid">No</span>') + "</div></div>" +
+            "</div>" +
+            (b.driverPaid
+              ? ""
+              : '<p><button id="markPaidBtn" class="btn btn--primary">Mark driver paid</button></p>');
+
+          const markBtn = document.getElementById("markPaidBtn");
+          if (markBtn) {
+            markBtn.addEventListener("click", async () => {
+              markBtn.disabled = true;
+              try {
+                const r = await fetch("/api/admin/booking/" + encodeURIComponent(id) + "/mark-driver-paid", { method: "POST" });
+                const data = await r.json();
+                if (r.ok) {
+                  load();
+                } else {
+                  alert(data.error || "Failed");
+                  markBtn.disabled = false;
+                }
+              } catch (e) {
+                alert("Network error");
+                markBtn.disabled = false;
+              }
+            });
+          }
+        } catch (e) {
+          content.innerHTML = '<div class="error">Failed to load booking</div>';
+        }
+      }
+
+      load();
+    })();
+  </script>
+</body>
+</html>
