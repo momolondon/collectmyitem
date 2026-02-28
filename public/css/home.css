@@ -8,7 +8,8 @@
   border-bottom: 1px solid rgba(255, 255, 255, 0.12);
 }
 
-.home-page .header--premium .header__inner {
+.home-page .header--premium .header__inner,
+.home-page .header--premium .header__bar {
   padding: 0;
   gap: 24px;
 }
@@ -167,6 +168,18 @@
 }
 
 /* ===== Responsive — Breakpoints: 360px, 480px, 768px, 1024px ===== */
+/* Darker background overlay on mobile for better readability */
+@media (max-width: 768px) {
+  .home-page .bg {
+    background:
+      linear-gradient(180deg, rgba(8,14,30,.65) 0%, rgba(12,22,45,.72) 100%),
+      url("../images/hero.jpg");
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+  }
+}
+
 /* Tablet (768px and below) */
 @media (max-width: 768px) {
   .home-page .trust {
@@ -223,11 +236,9 @@
     max-width: 160px;
   }
 
-  .home-page .header--premium .header__inner {
-    flex-direction: row;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 12px;
+  .home-page .header--premium .header__bar {
+    flex-direction: column;
+    align-items: stretch;
   }
 
   .home-page .header--premium .nav--premium {
@@ -284,68 +295,51 @@
   }
 }
 
-/* ===== Mobile header (≤768px): logo + 2-col nav grid ===== */
+/* ===== Mobile header (≤768px): compact logo + 2x2 quick actions ===== */
 @media (max-width: 768px) {
-  /* Header container */
+  /* Compact header bar (logo only) */
   header, .header, .header--premium {
     height: auto !important;
-    padding: 10px 12px !important;
+    padding: 8px 0 !important;
   }
 
-  /* Make header content stack */
-  header .container,
-  .header .container,
-  .header--premium .container {
-    display: flex !important;
-    flex-direction: column !important;
-    align-items: flex-start !important;
-    gap: 10px !important;
+  .header__bar {
+    padding: 8px 12px !important;
   }
 
-  /* Brand/logo row */
-  .brand {
-    display: flex !important;
-    align-items: center !important;
-    width: 100% !important;
-  }
-
-  /* Logo sizing (mobile) */
   .brand__logo {
-    height: 44px !important;
+    height: 42px !important;
     width: auto !important;
     object-fit: contain !important;
     display: block !important;
   }
 
-  /* Nav becomes a 2-column grid */
-  nav, .nav, .nav--premium {
+  /* Mobile actions area UNDER the header */
+  .mobile-actions {
+    padding: 8px 12px 12px !important;
+  }
+
+  .mobile-actions .nav,
+  .mobile-actions nav {
     width: 100% !important;
     display: grid !important;
     grid-template-columns: 1fr 1fr !important;
     gap: 10px !important;
-    justify-items: stretch !important;
-    align-items: center !important;
+  }
+
+  .mobile-actions .nav a,
+  .mobile-actions nav a,
+  .mobile-actions .nav button,
+  .mobile-actions nav button {
+    width: 100% !important;
+    text-align: center !important;
+    padding: 10px 12px !important;
+    font-size: 14px !important;
+    white-space: nowrap !important;
   }
 
   /* Hide divider in grid layout */
-  nav .nav__divider, .nav .nav__divider {
+  .mobile-actions .nav__divider {
     display: none !important;
-  }
-
-  /* Make each nav link/button fill its grid cell */
-  nav a, nav button,
-  .nav a, .nav button,
-  .nav--premium a, .nav--premium button {
-    width: 100% !important;
-    text-align: center !important;
-    white-space: nowrap !important;
-    padding: 10px 12px !important;
-    font-size: 14px !important;
-  }
-
-  /* If "How it works" is longer, allow it to wrap nicely */
-  nav a:first-child {
-    white-space: normal !important;
-    line-height: 1.1 !important;
   }
 }
