@@ -86,9 +86,9 @@ function resolveItems(body) {
   return [];
 }
 
-// Deposit logic (used for legacy checkout + main site)
+// Deposit logic: platform commission = 25% of total, deposit equals commission
 const DEPOSIT_PERCENT = 0.25;
-const MIN_DEPOSIT = 25; // £
+const MIN_DEPOSIT = 15; // £ (25% of MIN_TOTAL 60)
 const LONDON_CENTER_LAT = 51.5074;
 const LONDON_CENTER_LNG = -0.1278;
 const LONDON_ZONE_RADIUS_MILES = 17; // rough "zones 1-6" radius
@@ -479,15 +479,11 @@ async function calculatePricing(rawBody) {
   // Never allow total below minimum
   total = Math.max(MIN_TOTAL, Math.round(total));
 
-  let deposit = total * DEPOSIT_PERCENT;
-  if (!Number.isFinite(deposit)) {
-    throw new Error("Calculated deposit is invalid.");
-  }
-  deposit = Math.max(MIN_DEPOSIT, deposit);
-  deposit = Math.round(deposit);
+  // Platform commission = exactly 25% of total. Deposit must equal commission.
+  const platformProfit = Math.round(total * DEPOSIT_PERCENT);
+  const deposit = platformProfit;
 
   const remaining = total - deposit;
-  const platformProfit = Math.round(total * 0.25);
   const driverPayout = total - platformProfit;
 
   const breakdown = [
@@ -639,15 +635,12 @@ async function calculatePricingNew(body) {
   }
 
   total = Math.max(MIN_TOTAL, Math.round(total));
-  let deposit = total * DEPOSIT_PERCENT;
-  if (!Number.isFinite(deposit)) {
-    throw new Error("Calculated deposit is invalid.");
-  }
-  deposit = Math.max(MIN_DEPOSIT, deposit);
-  deposit = Math.round(deposit);
+
+  // Platform commission = exactly 25% of total. Deposit must equal commission.
+  const platformProfit = Math.round(total * DEPOSIT_PERCENT);
+  const deposit = platformProfit;
 
   const remaining = total - deposit;
-  const platformProfit = Math.round(total * 0.25);
   const driverPayout = total - platformProfit;
 
   const breakdown = [
