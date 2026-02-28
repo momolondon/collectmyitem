@@ -154,6 +154,12 @@ app.get("/", (req, res) => {
 app.get("/new-form", (req, res) => {
   res.sendFile(path.join(PUBLIC_DIR, "new-form.html"));
 });
+app.get("/quote", (req, res) => {
+  res.sendFile(path.join(PUBLIC_DIR, "quote.html"));
+});
+app.get("/details", (req, res) => {
+  res.sendFile(path.join(PUBLIC_DIR, "details.html"));
+});
 
 // ------------------------------
 // Booking file helpers
@@ -701,34 +707,57 @@ app.post("/api/price", async (req, res) => {
 async function handleCheckout(req, res) {
   try {
     const body = req.body || {};
+    const isNewFlow = isNewPricePayload(body);
 
-    const pickup = cleanPostcode(body.pickup);
-    const dropoff = cleanPostcode(body.dropoff);
+    // Resolve pickup/dropoff postcodes and addresses
+    let pickupPostcode = "";
+    let dropoffPostcode = "";
+    let pickupFullAddress = "";
+    let dropoffFullAddress = "";
 
-    if (!pickup || !dropoff) {
+    if (isNewFlow) {
+      const p = body.pickup || {};
+      const d = body.dropoff || {};
+      pickupPostcode = p.postcode ? cleanPostcode(p.postcode) : "";
+      dropoffPostcode = d.postcode ? cleanPostcode(d.postcode) : "";
+      pickupFullAddress = p.formattedAddress || "";
+      dropoffFullAddress = d.formattedAddress || "";
+    } else {
+      pickupPostcode = cleanPostcode(body.pickup);
+      dropoffPostcode = cleanPostcode(body.dropoff);
+      pickupFullAddress = body.pickupFullAddress || "";
+      dropoffFullAddress = body.dropoffFullAddress || "";
+    }
+
+    if (!pickupPostcode || !dropoffPostcode) {
       return res
         .status(400)
         .json({ error: "Pickup and delivery postcodes are required." });
     }
-    if (!isValidPostcode(pickup) || !isValidPostcode(dropoff)) {
+    if (!isValidPostcode(pickupPostcode) || !isValidPostcode(dropoffPostcode)) {
       return res
         .status(400)
         .json({ error: "Please enter valid UK postcodes for pickup and delivery." });
     }
 
-    if (!body.serviceType || !["man_van", "house_removal"].includes(body.serviceType)) {
+    if (!isNewFlow && body.serviceType && !["man_van", "house_removal"].includes(body.serviceType)) {
       return res
         .status(400)
         .json({ error: "Invalid service type. Please choose Man & Van or House Removal." });
     }
 
-    if (body.serviceType === "house_removal" && !body.houseSize) {
+    if (!isNewFlow && body.serviceType === "house_removal" && !body.houseSize) {
       return res
         .status(400)
         .json({ error: "Please select a valid property size for house removal." });
     }
 
-    if (!body.name || !body.phone) {
+    const customerName = (body.customerName || body.name || "").trim();
+    const customerPhone = (body.customerPhone || body.phone || "").trim();
+    const customerEmail = (body.customerEmail || body.email || "").trim();
+    const notes = (body.notes || "").trim();
+
+    if (!customerName || !customerPhone) {
       return res
         .status(400)
         .json({ error: "Name and mobile number are required to book." });
@@ -748,7 +777,6 @@ async function handleCheckout(req, res) {
             .json({ error: "Deposit has already been paid for this booking." });
         }
         if (existingBooking.stripeSessionId && existingBooking.stripeSessionUrl) {
-          // Re-use existing Stripe session instead of creating duplicates
           return res.json({
             url: existingBooking.stripeSessionUrl,
             bookingRef: existingBooking.bookingRef,
@@ -757,46 +785,51 @@ async function handleCheckout(req, res) {
       }
     }
 
-    // Generate a fresh booking reference if one was not supplied or did not exist
     if (!bookingRef) {
       do {
         bookingRef = `CMI-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
       } while (allBookings.some((b) => b.bookingRef === bookingRef));
     }
 
-    const pricing = await calculatePricing({
-      pickup,
-      dropoff,
-      serviceType: body.serviceType,
-      houseSize: body.houseSize,
-      pickupLat: body.pickupLat,
-      pickupLng: body.pickupLng,
-      dropoffLat: body.dropoffLat,
-      dropoffLng: body.dropoffLng,
-    });
+    const pricing = isNewFlow
+      ? await calculatePricingNew(body)
+      : await calculatePricing({
+          pickup: pickupPostcode,
+          dropoff: dropoffPostcode,
+          serviceType: body.serviceType,
+          houseSize: body.houseSize,
+          pickupLat: body.pickupLat,
+          pickupLng: body.pickupLng,
+          dropoffLat: body.dropoffLat,
+          dropoffLng: body.dropoffLng,
+        });
 
+    // Deposit must equal exactly 25% of total (no minimum rule)
     const amountPence = Math.round(pricing.deposit * 100);
-    if (!amountPence || amountPence < MIN_DEPOSIT * 100) {
+    if (!amountPence || amountPence <= 0) {
       return res.status(400).json({ error: "Invalid deposit amount." });
     }
 
-    // Persist booking (total, deposit, remaining, etc.) + admin fields
     upsertBooking({
       bookingRef,
-      pickup,
-      dropoff,
-      pickupFullAddress: body.pickupFullAddress || "",
-      dropoffFullAddress: body.dropoffFullAddress || "",
-      serviceType: body.serviceType,
+      pickup: pickupPostcode,
+      dropoff: dropoffPostcode,
+      pickupFullAddress: pickupFullAddress || pickupPostcode,
+      dropoffFullAddress: dropoffFullAddress || dropoffPostcode,
+      serviceType: body.serviceType || "man_van",
       houseSize: body.houseSize || "",
       stairsPickup: body.stairsPickup || "no",
       stairsDropoff: body.stairsDropoff || "no",
       date: body.date || "",
       timeWindow: body.timeWindow || "any",
-      name: body.name,
-      phone: body.phone,
-      email: body.email || "",
-      notes: body.notes || "",
+      helpers: body.helpers ?? body.helper,
+      customerName,
+      customerPhone,
+      customerEmail,
+      notes,
+      name: customerName,
+      phone: customerPhone,
+      email: customerEmail,
       items: resolveItems(body),
       itemsList: body.itemsList,
       itemCount: body.itemCount,
@@ -837,7 +870,7 @@ async function handleCheckout(req, res) {
       metadata: {
         bookingRef,
       },
-      success_url: `${BASE_URL}/success.html`,
+      success_url: `${BASE_URL}/success.html?bookingRef=${encodeURIComponent(bookingRef)}`,
       cancel_url: `${BASE_URL}/cancel.html`,
     });
 
@@ -944,7 +977,7 @@ if (!process.env.GOOGLE_MAPS_API_KEY) {
 
 app.listen(PORT, () => {
   console.log(`✅ Server running on http://localhost:${PORT}`);
-  console.log(`   New pricing form: http://localhost:${PORT}/new-form`);
+  console.log(`   Quote (Step 1): http://localhost:${PORT}/quote`);
   console.log(`   Admin (local): http://localhost:${PORT}/admin`);
 });
 

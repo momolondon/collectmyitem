@@ -25,7 +25,7 @@
       <div class="ref" id="bookingRef">CMI-XXXXXX</div>
 
       <p class="muted" style="margin-top:14px;">
-        We’ll contact you shortly to confirm pickup details.
+        A driver will contact you ASAP.
       </p>
 
       <a class="btn" href="index.html">Back to home</a>
@@ -33,17 +33,12 @@
   </main>
 
   <script>
-    // Simple reference generator (for now)
-    const ref = "CMI-" + Math.random().toString(36).slice(2, 8).toUpperCase();
-    document.getElementById("bookingRef").textContent = ref;
-  </script>
-  <script>
-  (function () {
-    const params = new URLSearchParams(window.location.search);
-    const ref = params.get("bookingRef"); // must match server.js
-    const el = document.getElementById("bookingRef");
-    if (el) el.textContent = ref || "CMI-XXXXXX";
-  })();
+    (function () {
+      const params = new URLSearchParams(window.location.search);
+      const ref = params.get("bookingRef");
+      const el = document.getElementById("bookingRef");
+      if (el) el.textContent = ref || "CMI-XXXXXX";
+    })();
   </script>
 </body>
 </html>

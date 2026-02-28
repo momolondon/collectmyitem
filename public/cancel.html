@@ -10,8 +10,9 @@
     .card { border: 1px solid #e6e6e6; border-radius: 14px; padding: 18px; background: #fff; }
     .title { font-size: clamp(18px, 4vw, 22px); font-weight: 700; margin: 0 0 8px; }
     .muted { color: #666; margin: 0 0 14px; }
-    .btn { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 0 14px; margin-top: 14px; border-radius: 10px; border: 1px solid #111; text-decoration: none; }
-    @media (max-width: 480px) { .page { padding: 0 12px; margin: 24px auto; } }
+    .btn-wrap { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+    .btn { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 0 14px; border-radius: 10px; border: 1px solid #111; text-decoration: none; }
+    @media (max-width: 480px) { .page { padding: 0 12px; margin: 24px auto; } .btn-wrap { flex-direction: column; } }
   </style>
 </head>
 <body>
@@ -19,7 +20,10 @@
     <div class="card">
       <p class="title">Payment cancelled</p>
       <p class="muted">No worries — you haven’t been charged.</p>
-      <a class="btn" href="index.html">Try again</a>
+      <div class="btn-wrap">
+        <a class="btn" href="details.html">Back to details</a>
+        <a class="btn" href="quote.html">Start new quote</a>
+      </div>
     </div>
   </main>
 </body>
