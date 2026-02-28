@@ -4,11 +4,15 @@ body {
   background: #f6f1e7;
   transition: background 3s ease;
 }
-/* Dark overlay */
+/* Dark overlay — radial gradient keeps header/footer readable while focusing on form */
 .page-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(20, 20, 20, 0.55);
+  background: radial-gradient(
+    ellipse 90% 60% at 50% 45%,
+    rgba(20, 20, 20, 0.42),
+    rgba(20, 20, 20, 0.18)
+  );
   opacity: 0;
   pointer-events: none;
   transition: opacity 3s ease;
