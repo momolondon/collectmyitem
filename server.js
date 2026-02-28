@@ -136,6 +136,14 @@ app.post("/webhook", express.raw({ type: "application/json" }), (req, res) => {
 app.use(cors());
 app.use(express.json());
 
+// Admin routes BEFORE static (so /admin and /admin/booking/:id are matched)
+app.get("/admin", (req, res) => {
+  res.sendFile(path.join(PUBLIC_DIR, "admin", "index.html"));
+});
+app.get("/admin/booking/:id", (req, res) => {
+  res.sendFile(path.join(PUBLIC_DIR, "admin", "booking.html"));
+});
+
 // Serve static frontend
 app.use(express.static(PUBLIC_DIR));
 
@@ -167,21 +175,73 @@ function writeBookings(bookings) {
   fs.writeFileSync(BOOKINGS_FILE, JSON.stringify(bookings, null, 2));
 }
 
+const PLATFORM_COMMISSION_PERCENT = 25;
+
+function generateBookingId() {
+  return "b" + Math.random().toString(36).slice(2, 11);
+}
+
+function enrichBookingWithAdminFields(booking, data) {
+  const total = Number(data.total ?? booking.total ?? 0);
+  const platformProfit = Math.round(total * 0.25);
+  const driverPayoutVal = total - platformProfit;
+
+  return {
+    ...booking,
+    ...data,
+    id: booking.id ?? data.id ?? generateBookingId(),
+    createdAt: booking.createdAt ?? data.createdAt ?? new Date().toISOString(),
+    customerPrice: data.customerPrice ?? booking.customerPrice ?? total,
+    deposit: data.deposit ?? booking.deposit ?? 0,
+    remainingBalance: data.remainingBalance ?? booking.remainingBalance ?? (data.remaining ?? booking.remaining ?? 0),
+    platformProfit: booking.platformProfit ?? data.platformProfit ?? platformProfit,
+    driverPayout: booking.driverPayout ?? data.driverPayout ?? driverPayoutVal,
+    driverPaid: booking.driverPaid ?? data.driverPaid ?? false,
+    driverPaidAt: booking.driverPaidAt ?? data.driverPaidAt ?? null,
+    status: data.status ?? booking.status ?? "pending",
+  };
+}
+
 function upsertBooking(data) {
   const bookings = readBookings();
   let booking = bookings.find((b) => b.bookingRef === data.bookingRef);
   const now = new Date().toISOString();
 
   if (!booking) {
+    const total = Number(data.total ?? 0);
+    const deposit = Number(data.deposit ?? 0);
+    const remaining = Number(data.remaining ?? total - deposit);
+    const platformProfit = Math.round(total * 0.25);
+    const driverPayoutVal = total - platformProfit;
+
     booking = {
       ...data,
-      status: data.status || "pending_deposit",
+      id: generateBookingId(),
       createdAt: now,
       updatedAt: now,
+      status: data.status || "pending_deposit",
+      customerPrice: total,
+      deposit,
+      remainingBalance: remaining,
+      platformProfit,
+      driverPayout: driverPayoutVal,
+      driverPaid: false,
+      driverPaidAt: null,
+      pickupAddress: data.pickupFullAddress || data.pickupAddress || data.pickup || "",
+      dropoffAddress: data.dropoffFullAddress || data.dropoffAddress || data.dropoff || "",
     };
     bookings.push(booking);
   } else {
-    Object.assign(booking, data, { updatedAt: now });
+    const updates = { ...data, updatedAt: now };
+    if (data.total != null && booking.customerPrice == null) {
+      const total = Number(data.total);
+      updates.customerPrice = total;
+      updates.platformProfit = Math.round(total * 0.25);
+      updates.driverPayout = total - updates.platformProfit;
+    }
+    if (data.pickupFullAddress) updates.pickupAddress = data.pickupFullAddress;
+    if (data.dropoffFullAddress) updates.dropoffAddress = data.dropoffFullAddress;
+    Object.assign(booking, updates);
   }
 
   writeBookings(bookings);
@@ -427,6 +487,8 @@ async function calculatePricing(rawBody) {
   deposit = Math.round(deposit);
 
   const remaining = total - deposit;
+  const platformProfit = Math.round(total * 0.25);
+  const driverPayout = total - platformProfit;
 
   const breakdown = [
     `Base fee: £${BASE_FEE.toFixed(0)}`,
@@ -442,6 +504,8 @@ async function calculatePricing(rawBody) {
     total,
     deposit,
     remaining,
+    platformProfit,
+    driverPayout,
     miles: Math.round(miles * 10) / 10,
     distanceCharge: Math.round(distanceCharge),
     base: BASE_FEE,
@@ -583,6 +647,8 @@ async function calculatePricingNew(body) {
   deposit = Math.round(deposit);
 
   const remaining = total - deposit;
+  const platformProfit = Math.round(total * 0.25);
+  const driverPayout = total - platformProfit;
 
   const breakdown = [
     `Base fee: £${BASE_FEE.toFixed(0)}`,
@@ -600,6 +666,8 @@ async function calculatePricingNew(body) {
     total,
     deposit,
     remaining,
+    platformProfit,
+    driverPayout,
     miles: Math.round(miles * 10) / 10,
     distanceCharge: Math.round(distanceCharge),
     baseFee: BASE_FEE,
@@ -719,11 +787,13 @@ async function handleCheckout(req, res) {
       return res.status(400).json({ error: "Invalid deposit amount." });
     }
 
-    // Persist booking (total, deposit, remaining, etc.)
+    // Persist booking (total, deposit, remaining, etc.) + admin fields
     upsertBooking({
       bookingRef,
       pickup,
       dropoff,
+      pickupFullAddress: body.pickupFullAddress || "",
+      dropoffFullAddress: body.dropoffFullAddress || "",
       serviceType: body.serviceType,
       houseSize: body.houseSize || "",
       stairsPickup: body.stairsPickup || "no",
@@ -734,10 +804,25 @@ async function handleCheckout(req, res) {
       phone: body.phone,
       email: body.email || "",
       notes: body.notes || "",
+      items: resolveItems(body),
+      itemsList: body.itemsList,
+      itemCount: body.itemCount,
+      itemDetails: body.itemDetails,
       total: pricing.total,
       deposit: pricing.deposit,
       remaining: pricing.remaining,
+      platformProfit: pricing.platformProfit,
+      driverPayout: pricing.driverPayout,
       miles: pricing.miles,
+      breakdown: pricing.breakdown,
+      baseFee: pricing.base ?? pricing.baseFee,
+      distanceCharge: pricing.distanceCharge,
+      congestionFee: pricing.congestionFee,
+      helperFee: pricing.helperFee,
+      stairsPickupFee: pricing.stairsPickupFee,
+      stairsDropoffFee: pricing.stairsDropoffFee,
+      bulkyFee: pricing.bulkyFee ?? pricing.bulkyCharge,
+      boxesFee: pricing.boxesFee,
       status: "pending_deposit",
     });
 
@@ -800,6 +885,62 @@ app.get("/api/maps-config", (req, res) => {
 });
 
 // ------------------------------
+// Admin (local-only, no login)
+// ------------------------------
+
+function normalizeBookingForAdmin(b) {
+  const total = Number(b.customerPrice ?? b.total ?? 0);
+  const platformProfit = Number(b.platformProfit ?? Math.round(total * 0.25));
+  const payout = Number(b.driverPayout ?? total - platformProfit);
+  return {
+    ...b,
+    id: b.id ?? b.bookingRef,
+    customerPrice: total,
+    platformProfit,
+    driverPayout: payout,
+    driverPaid: Boolean(b.driverPaid),
+    driverPaidAt: b.driverPaidAt ?? null,
+    status: b.status ?? "pending",
+    pickupAddress: b.pickupAddress ?? b.pickup ?? "",
+    dropoffAddress: b.dropoffAddress ?? b.dropoff ?? "",
+  };
+}
+
+app.get("/api/admin/bookings", (req, res) => {
+  const bookings = readBookings().map(normalizeBookingForAdmin);
+  res.json(bookings);
+});
+
+app.get("/api/admin/booking/:id", (req, res) => {
+  const id = req.params.id;
+  const bookings = readBookings();
+  const booking = bookings.find((b) => b.id === id || b.bookingRef === id);
+  if (!booking) {
+    return res.status(404).json({ error: "Booking not found" });
+  }
+  res.json(normalizeBookingForAdmin(booking));
+});
+
+app.post("/api/admin/booking/:id/mark-driver-paid", (req, res) => {
+  const id = req.params.id;
+  const bookings = readBookings();
+  const idx = bookings.findIndex((b) => b.id === id || b.bookingRef === id);
+  if (idx === -1) {
+    return res.status(404).json({ error: "Booking not found" });
+  }
+  const booking = bookings[idx];
+  if (booking.driverPaid) {
+    return res.status(400).json({ error: "Driver already marked as paid" });
+  }
+  const now = new Date().toISOString();
+  booking.driverPaid = true;
+  booking.driverPaidAt = now;
+  booking.updatedAt = now;
+  writeBookings(bookings);
+  res.json({ ok: true, booking: normalizeBookingForAdmin(booking) });
+});
+
+// ------------------------------
 // Start server
 // ------------------------------
 
@@ -811,5 +952,6 @@ if (!process.env.GOOGLE_MAPS_API_KEY) {
 app.listen(PORT, () => {
   console.log(`✅ Server running on http://localhost:${PORT}`);
   console.log(`   New pricing form: http://localhost:${PORT}/new-form`);
+  console.log(`   Admin (local): http://localhost:${PORT}/admin`);
 });
 

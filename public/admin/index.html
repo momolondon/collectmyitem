@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Admin — Collect My Item</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: system-ui, -apple-system, sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; }
+    .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+    h1 { margin: 0 0 24px; font-size: 1.5rem; }
+    .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 32px; }
+    .kpi { background: #1e293b; border-radius: 12px; padding: 20px; }
+    .kpi__label { font-size: 0.85rem; color: #94a3b8; margin-bottom: 4px; }
+    .kpi__value { font-size: 1.5rem; font-weight: 700; }
+    .table-wrap { overflow-x: auto; background: #1e293b; border-radius: 12px; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 12px 16px; text-align: left; border-bottom: 1px solid #334155; }
+    th { background: #0f172a; font-weight: 600; font-size: 0.85rem; }
+    tr:hover { background: rgba(255,255,255,.03); }
+    .btn { display: inline-block; padding: 8px 14px; border-radius: 8px; text-decoration: none; font-size: 0.9rem; cursor: pointer; border: none; }
+    .btn--sm { padding: 6px 10px; font-size: 0.85rem; }
+    .btn--primary { background: #3b82f6; color: #fff; }
+    .btn--primary:hover { background: #2563eb; }
+    .btn--ghost { background: transparent; color: #94a3b8; }
+    .btn--ghost:hover { color: #fff; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 0.8rem; }
+    .badge--paid { background: #065f46; color: #6ee7b7; }
+    .badge--unpaid { background: #7f1d1d; color: #fca5a5; }
+    .badge--pending { background: #78350f; color: #fcd34d; }
+    .empty { text-align: center; padding: 48px; color: #64748b; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Admin Dashboard</h1>
+    <div class="kpis" id="kpis">
+      <div class="kpi">
+        <div class="kpi__label">Total bookings</div>
+        <div class="kpi__value" id="totalBookings">—</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi__label">Total revenue</div>
+        <div class="kpi__value" id="totalRevenue">—</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi__label">Platform profit</div>
+        <div class="kpi__value" id="platformProfit">—</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi__label">Driver payouts owed</div>
+        <div class="kpi__value" id="driverPayoutsOwed">—</div>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Date</th>
+            <th>Pickup</th>
+            <th>Dropoff</th>
+            <th>Customer price</th>
+            <th>Platform profit</th>
+            <th>Driver payout</th>
+            <th>Deposit</th>
+            <th>Remaining</th>
+            <th>Status</th>
+            <th>Driver paid</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="tbody">
+          <tr><td colspan="12" class="empty">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <script>
+    (function () {
+      const tbody = document.getElementById("tbody");
+      const totalBookingsEl = document.getElementById("totalBookings");
+      const totalRevenueEl = document.getElementById("totalRevenue");
+      const platformProfitEl = document.getElementById("platformProfit");
+      const driverPayoutsOwedEl = document.getElementById("driverPayoutsOwed");
+
+      function formatDate(s) {
+        if (!s) return "—";
+        try {
+          const d = new Date(s);
+          return isNaN(d.getTime()) ? s : d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+        } catch (_) { return s; }
+      }
+
+      function fmt(v) {
+        const n = Number(v);
+        return Number.isFinite(n) ? "£" + n.toFixed(0) : "—";
+      }
+
+      function statusBadge(s) {
+        const c = (s || "").toLowerCase();
+        if (c === "paid_deposit") return '<span class="badge badge--pending">Paid deposit</span>';
+        if (c === "pending" || c === "pending_deposit") return '<span class="badge badge--pending">Pending</span>';
+        return '<span class="badge">' + (s || "—") + "</span>";
+      }
+
+      function driverPaidBadge(b) {
+        if (b.driverPaid) return '<span class="badge badge--paid">Yes</span>';
+        return '<span class="badge badge--unpaid">No</span>';
+      }
+
+      async function load() {
+        const res = await fetch("/api/admin/bookings");
+        const bookings = await res.json();
+        const totalRevenue = bookings.reduce((s, b) => s + (Number(b.customerPrice) || 0), 0);
+        const platformProfit = bookings.reduce((s, b) => s + (Number(b.platformProfit) || 0), 0);
+        const driverPayoutsOwed = bookings
+          .filter((b) => !b.driverPaid)
+          .reduce((s, b) => s + (Number(b.driverPayout) || 0), 0);
+
+        totalBookingsEl.textContent = bookings.length;
+        totalRevenueEl.textContent = fmt(totalRevenue);
+        platformProfitEl.textContent = fmt(platformProfit);
+        driverPayoutsOwedEl.textContent = fmt(driverPayoutsOwed);
+
+        if (!bookings.length) {
+          tbody.innerHTML = '<tr><td colspan="12" class="empty">No bookings yet</td></tr>';
+          return;
+        }
+
+        tbody.innerHTML = bookings
+          .map((b) => {
+            const id = b.id || b.bookingRef;
+            const pickup = (b.pickupAddress || b.pickup || "").slice(0, 30) + ((b.pickupAddress || b.pickup || "").length > 30 ? "…" : "");
+            const dropoff = (b.dropoffAddress || b.dropoff || "").slice(0, 30) + ((b.dropoffAddress || b.dropoff || "").length > 30 ? "…" : "");
+            const markBtn = b.driverPaid
+              ? ""
+              : '<button class="btn btn--sm btn--primary" data-id="' + id + '" data-action="mark-paid">Mark paid</button>';
+            return (
+              "<tr>" +
+              "<td>" + (id || "—") + "</td>" +
+              "<td>" + formatDate(b.date || b.createdAt) + "</td>" +
+              "<td>" + (pickup || "—") + "</td>" +
+              "<td>" + (dropoff || "—") + "</td>" +
+              "<td>" + fmt(b.customerPrice) + "</td>" +
+              "<td>" + fmt(b.platformProfit) + "</td>" +
+              "<td>" + fmt(b.driverPayout) + "</td>" +
+              "<td>" + fmt(b.deposit) + "</td>" +
+              "<td>" + fmt(b.remainingBalance) + "</td>" +
+              "<td>" + statusBadge(b.status) + "</td>" +
+              "<td>" + driverPaidBadge(b) + "</td>" +
+              '<td><a href="/admin/booking/' + encodeURIComponent(id) + '" class="btn btn--sm btn--ghost">View</a> ' + markBtn + "</td>" +
+              "</tr>"
+            );
+          })
+          .join("");
+
+        tbody.querySelectorAll("[data-action=mark-paid]").forEach((btn) => {
+          btn.addEventListener("click", async () => {
+            const id = btn.getAttribute("data-id");
+            if (!id) return;
+            btn.disabled = true;
+            try {
+              const r = await fetch("/api/admin/booking/" + encodeURIComponent(id) + "/mark-driver-paid", { method: "POST" });
+              const data = await r.json();
+              if (r.ok) {
+                load();
+              } else {
+                alert(data.error || "Failed");
+                btn.disabled = false;
+              }
+            } catch (e) {
+              alert("Network error");
+              btn.disabled = false;
+            }
+          });
+        });
+      }
+
+      load();
+    })();
+  </script>
+</body>
+</html>
