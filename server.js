@@ -25,16 +25,16 @@ const BASE_FEE = 35; // £
 const PER_MILE_RATE = 1.6; // £ per mile
 const CONGESTION_FEE = 18; // £ flat
 const HELPER_FEE = 30; // £ flat
-const BULKY_BAND_FEE = 25; // £ per 2-item band above first 2
+const BULKY_BAND_FEE = 15; // £ per 2-item band above first 2
 const MIN_TOTAL = 70; // Never allow total below £70
 
-// Bulky items: sofa, corner sofa, fridge, freezer, washing machine, tumble dryer,
-// dishwasher, wardrobe, mattress, bed frame, dining table, tv, oven, kitchen top,
-// doors, desk, armchair, motorbike
+// Bulky items: sofa, corner sofa, armchair, dining table, bed frame, mattress, wardrobe,
+// chest of drawers, desk, tv stand, fridge, freezer, washing machine, tumble dryer,
+// dishwasher, oven, TV
 const BULKY_ITEM_TERMS = [
-  "corner sofa", "sofa", "fridge", "freezer", "washing machine", "tumble dryer",
-  "dishwasher", "wardrobe", "mattress", "bed frame", "dining table", "tv",
-  "oven", "kitchen top", "doors", "desk", "armchair", "motorbike",
+  "corner sofa", "sofa", "armchair", "dining table", "bed frame", "mattress", "wardrobe",
+  "chest of drawers", "desk", "tv stand", "fridge", "freezer", "washing machine",
+  "tumble dryer", "dishwasher", "oven", "tv",
 ];
 
 function countBulkyUnits(items) {
@@ -73,6 +73,17 @@ function countBoxUnits(items) {
 
 function calcBoxesFee(boxUnits) {
   return boxUnits <= BOX_FREE_LIMIT ? 0 : (boxUnits - BOX_FREE_LIMIT) * BOX_EXTRA_FEE;
+}
+
+/** Resolve items array from body.items or body.itemsList (server recomputes, does not trust client) */
+function resolveItems(body) {
+  if (Array.isArray(body?.items)) return body.items;
+  try {
+    const raw = body?.itemsList;
+    if (typeof raw === "string" && raw.trim()) return JSON.parse(raw);
+    if (Array.isArray(raw)) return raw;
+  } catch (_) {}
+  return [];
 }
 
 // Deposit logic (used for legacy checkout + main site)
@@ -393,10 +404,11 @@ async function calculatePricing(rawBody) {
     body.helper === "1";
   const helperFee = helperSelected ? HELPER_FEE : 0;
 
-  const bulkyUnits = countBulkyUnits(body.items);
+  const items = resolveItems(body);
+  const bulkyUnits = countBulkyUnits(items);
   const bulkyCharge = calcBulkyCharge(bulkyUnits);
 
-  const boxUnits = countBoxUnits(body.items);
+  const boxUnits = countBoxUnits(items);
   const boxesFee = calcBoxesFee(boxUnits);
 
   let total = BASE_FEE + distanceCharge + congestionFee + helperFee + bulkyCharge + boxesFee;
@@ -434,6 +446,7 @@ async function calculatePricing(rawBody) {
     distanceCharge: Math.round(distanceCharge),
     base: BASE_FEE,
     boxesFee,
+    bulkyFee: bulkyCharge,
     perMile: PER_MILE_RATE,
     congestionApplied,
     congestionFee,
@@ -549,10 +562,11 @@ async function calculatePricingNew(body) {
   const stairsDropoffFee = helpersCount >= 1 ? 0 : (stairsDropoff ? STAIRS_FEE : 0);
   const stairsTotal = stairsPickupFee + stairsDropoffFee;
 
-  const bulkyUnits = countBulkyUnits(body.items);
+  const items = resolveItems(body);
+  const bulkyUnits = countBulkyUnits(items);
   const bulkyCharge = calcBulkyCharge(bulkyUnits);
 
-  const boxUnits = countBoxUnits(body.items);
+  const boxUnits = countBoxUnits(items);
   const boxesFee = calcBoxesFee(boxUnits);
 
   let total = BASE_FEE + distanceCharge + congestionFee + helperFee + stairsTotal + bulkyCharge + boxesFee;
@@ -590,6 +604,7 @@ async function calculatePricingNew(body) {
     distanceCharge: Math.round(distanceCharge),
     baseFee: BASE_FEE,
     boxesFee,
+    bulkyFee: bulkyCharge,
     perMile: PER_MILE_RATE,
     congestionApplied,
     congestionFee,
