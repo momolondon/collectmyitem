@@ -26,7 +26,7 @@ const PER_MILE_RATE = 1.6; // £ per mile
 const CONGESTION_FEE = 18; // £ flat
 const HELPER_FEE = 30; // £ flat
 const BULKY_BAND_FEE = 15; // £ per 2-item band above first 2
-const MIN_TOTAL = 70; // Never allow total below £70
+const MIN_TOTAL = 60; // Never allow total below £60
 
 // Bulky items: sofa, corner sofa, armchair, dining table, bed frame, mattress, wardrobe,
 // chest of drawers, desk, tv stand, fridge, freezer, washing machine, tumble dryer,
