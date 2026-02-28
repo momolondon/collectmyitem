@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Customer details — Step 2 — Collect My Item</title>
+  <meta name="description" content="Enter your details to pay the deposit and complete your booking." />
+  <link rel="stylesheet" href="css/new-form.css" />
+  <style>
+    .step-badge { display: inline-block; padding: 4px 10px; background: rgba(201,162,39,0.2); border-radius: 8px; font-size: 0.8rem; font-weight: 600; color: #8a7012; }
+    .price-summary { background: #fff7df; border: 1px solid rgba(201,162,39,0.5); border-radius: 12px; padding: 18px; margin-bottom: 24px; }
+    .price-summary__row { display: flex; justify-content: space-between; margin-bottom: 8px; }
+    .price-summary__row:last-child { margin-bottom: 0; }
+    .price-summary__total { font-size: 1.25rem; font-weight: 700; color: #1f2937; }
+  </style>
+</head>
+<body>
+  <div class="page-overlay"></div>
+  <div class="page">
+    <header class="header">
+      <div class="container">
+        <a class="brand" href="/">Collect My Item</a>
+        <a class="link" href="quote.html">← Back to quote</a>
+      </div>
+    </header>
+
+    <main class="main container pricing-form-card">
+      <p class="subtitle" style="margin-bottom:0.5rem;"><span class="step-badge">Step 2 of 3</span></p>
+      <h1 class="title">Customer details</h1>
+      <p class="subtitle">Enter your details to pay the deposit and secure your booking.</p>
+
+      <div id="priceSummary" class="price-summary">
+        <div class="price-summary__row">
+          <span>Total</span>
+          <strong id="priceTotal">£—</strong>
+        </div>
+        <div class="price-summary__row">
+          <span>Deposit (25%)</span>
+          <strong id="priceDeposit">£—</strong>
+        </div>
+        <div class="price-summary__row price-summary__total">
+          <span>Remaining on the day</span>
+          <span id="priceRemaining">£—</span>
+        </div>
+      </div>
+
+      <form id="detailsForm" class="form" novalidate>
+        <div class="form__section">
+          <h2 class="form__heading">Your details</h2>
+
+          <div class="field">
+            <label class="field__label" for="customerName">Full name *</label>
+            <input id="customerName" name="customerName" type="text" class="field__input" placeholder="e.g. John Smith" required />
+            <span id="customerName-error" class="field__error" role="alert"></span>
+          </div>
+
+          <div class="field">
+            <label class="field__label" for="customerPhone">Mobile number *</label>
+            <input id="customerPhone" name="customerPhone" type="tel" class="field__input" placeholder="e.g. 07700 900123" required />
+            <span class="field__hint">UK mobile format: 07xxx xxxxxx</span>
+            <span id="customerPhone-error" class="field__error" role="alert"></span>
+          </div>
+
+          <div class="field">
+            <label class="field__label" for="customerEmail">Email (optional)</label>
+            <input id="customerEmail" name="customerEmail" type="email" class="field__input" placeholder="e.g. you@example.com" />
+          </div>
+
+          <div class="field">
+            <label class="field__label" for="notes">Notes (optional)</label>
+            <textarea id="notes" name="notes" class="field__input" rows="3" placeholder="e.g. parking info, access instructions"></textarea>
+          </div>
+        </div>
+
+        <div class="form__actions">
+          <button type="submit" id="payDepositBtn" class="btn btn--primary">Pay deposit</button>
+        </div>
+      </form>
+
+      <section id="errorSection" class="error-box" role="alert" hidden>
+        <p id="errorMessage"></p>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="container">
+        <p>Collect My Item — London, Greater London &amp; surrounding counties collection and delivery</p>
+      </div>
+    </footer>
+  </div>
+
+  <script src="details.js"></script>
+  <script>
+    window.addEventListener("load", () => {
+      setTimeout(() => document.body.classList.add("page-loaded"), 100);
+    });
+  </script>
+</body>
+</html>
