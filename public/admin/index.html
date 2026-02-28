@@ -41,11 +41,30 @@
     .modal__value { font-size: 0.95rem; }
     .modal__link { display: inline-block; margin-top: 16px; color: #3b82f6; text-decoration: none; font-size: 0.9rem; }
     .modal__link:hover { text-decoration: underline; }
+    .btn--whatsapp { background: #25d366; color: #fff; }
+    .btn--whatsapp:hover { background: #20bd5a; }
+    .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: #1e293b; color: #e2e8f0; padding: 10px 20px; border-radius: 8px; font-size: 0.9rem; box-shadow: 0 4px 12px rgba(0,0,0,.4); z-index: 200; animation: toast-in .2s ease; }
+    @keyframes toast-in { from { opacity: 0; transform: translateX(-50%) translateY(10px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
+    .header-row { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; margin-bottom: 24px; }
+    .header-row h1 { margin: 0; }
+    .hidden { display: none !important; }
+    #profitModal:not(.hidden) { display: flex; }
+    .report-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; margin-bottom: 20px; }
+    .report-controls label { display: flex; flex-direction: column; gap: 4px; font-size: 0.85rem; color: #94a3b8; }
+    .report-controls input[type="date"] { padding: 8px 12px; border-radius: 8px; border: 1px solid #334155; background: #0f172a; color: #e2e8f0; font-size: 0.9rem; }
+    .btn--success { background: #059669; color: #fff; }
+    .btn--success:hover { background: #047857; }
+    .report-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 20px; }
+    .report-summary .kpi { margin: 0; }
+    .modal__inner--wide { max-width: 900px; }
   </style>
 </head>
 <body>
   <div class="container">
-    <h1>Admin Dashboard</h1>
+    <div class="header-row">
+      <h1>Admin Dashboard</h1>
+      <button id="openProfitReport" class="btn btn--primary">Profit report</button>
+    </div>
     <div class="kpis" id="kpis">
       <div class="kpi">
         <div class="kpi__label">Total bookings</div>
@@ -86,6 +105,28 @@
           <tr><td colspan="12" class="empty">Loading…</td></tr>
         </tbody>
       </table>
+    </div>
+  </div>
+  <div id="profitModal" class="modal hidden">
+    <div class="modal__inner modal__inner--wide">
+      <h2 class="modal__title">Profit report</h2>
+      <div class="report-controls">
+        <label>
+          From
+          <input type="date" id="reportFrom">
+        </label>
+        <label>
+          To
+          <input type="date" id="reportTo">
+        </label>
+        <button id="runReport" class="btn btn--primary">Run report</button>
+        <button id="exportReport" class="btn btn--success">Export CSV</button>
+        <button id="closeProfitReport" class="btn btn--ghost">Close</button>
+      </div>
+      <div id="reportSummary" class="report-summary"></div>
+      <div class="table-wrap">
+        <table id="reportTable"></table>
+      </div>
     </div>
   </div>
   <div id="viewModal" class="modal">
@@ -132,6 +173,7 @@
       async function load() {
         const res = await fetch("/api/admin/bookings");
         const bookings = await res.json();
+        window.bookings = bookings;
         const totalRevenue = bookings.reduce((s, b) => s + (Number(b.customerPrice) || 0), 0);
         const platformProfit = bookings.reduce((s, b) => s + (Number(b.platformProfit) || 0), 0);
         const driverPayoutsOwed = bookings
@@ -169,7 +211,7 @@
               "<td>" + fmt(b.remainingBalance) + "</td>" +
               "<td>" + statusBadge(b.status) + "</td>" +
               "<td>" + driverPaidBadge(b) + "</td>" +
-              '<td><button type="button" class="btn btn--sm btn--ghost" data-id="' + id + '" data-action="view">View</button> ' + markBtn + "</td>" +
+              '<td><button type="button" class="btn btn--sm btn--ghost" data-id="' + id + '" data-action="view">View</button> <button type="button" class="btn btn--sm btn--whatsapp" data-id="' + id + '" data-action="whatsapp" title="Copy to WhatsApp">WhatsApp</button> ' + markBtn + "</td>" +
               "</tr>"
             );
           })
@@ -265,6 +307,192 @@
           document.getElementById("viewModal").classList.remove("open");
         }
       });
+
+      function extractPostcode(addr) {
+        if (!addr) return "";
+        const s = typeof addr === "string" ? addr : (addr.postcode || addr.formattedAddress || "");
+        if (!s) return "";
+        const m = s.match(/[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}/i);
+        if (m) return m[0].trim().toUpperCase();
+        const outward = s.match(/[A-Z]{1,2}\d[A-Z\d]?/i);
+        return outward ? outward[0].toUpperCase() : s.slice(0, 8);
+      }
+
+      function buildWhatsAppMessage(b) {
+        const bookingId = b.id || b.bookingRef || "—";
+        const pickup = b.pickup && typeof b.pickup === "object" ? b.pickup : null;
+        const dropoff = b.dropoff && typeof b.dropoff === "object" ? b.dropoff : null;
+        const pickupPostcode = pickup?.postcode || extractPostcode(b.pickupAddress || b.pickup) || "—";
+        const dropoffPostcode = dropoff?.postcode || extractPostcode(b.dropoffAddress || b.dropoff) || "—";
+        let itemsSummary = "—";
+        if (Array.isArray(b.items) && b.items.length) {
+          itemsSummary = b.items.map((i) => (i.name || "Item") + " × " + (i.qty || 1)).join(", ");
+        } else if (Array.isArray(b.itemsList) && b.itemsList.length) {
+          itemsSummary = b.itemsList.join(", ");
+        } else if (b.itemDetails) itemsSummary = b.itemDetails;
+        const helpers = (b.helpers ?? b.helper ?? 0).toString();
+        const stairsPickup = (b.stairsPickup === "yes" || b.stairsPickup === true) ? "Yes" : "No";
+        const stairsDropoff = (b.stairsDropoff === "yes" || b.stairsDropoff === true) ? "Yes" : "No";
+        const stairs = stairsPickup + " / " + stairsDropoff;
+        const customerPrice = Number.isFinite(Number(b.customerPrice)) ? "£" + Number(b.customerPrice).toFixed(0) : "—";
+        const driverPayout = Number.isFinite(Number(b.driverPayout)) ? "£" + Number(b.driverPayout).toFixed(0) : "—";
+        return (
+          "----------------------------------------\n" +
+          "🚚 NEW DELIVERY JOB\n\n" +
+          "Booking ID: " + bookingId + "\n\n" +
+          "Pickup area: " + pickupPostcode + "\n" +
+          "Dropoff area: " + dropoffPostcode + "\n\n" +
+          "Items: " + itemsSummary + "\n\n" +
+          "Helpers: " + helpers + "\n" +
+          "Stairs: " + stairs + "\n\n" +
+          "Customer price: " + customerPrice + "\n" +
+          "Driver payout: " + driverPayout + "\n\n" +
+          "Reply: ACCEPT " + bookingId + "\n" +
+          "----------------------------------------"
+        );
+      }
+
+      function showToast(msg) {
+        const el = document.createElement("div");
+        el.className = "toast";
+        el.textContent = msg;
+        document.body.appendChild(el);
+        setTimeout(() => el.remove(), 2500);
+      }
+
+      document.addEventListener("click", (e) => {
+        const btn = e.target.closest('[data-action="whatsapp"]');
+        if (!btn) return;
+        const id = btn.getAttribute("data-id");
+        if (!id || !window.bookings) return;
+        const b = window.bookings.find((x) => (x.id || x.bookingRef) === id);
+        if (!b) return;
+        const msg = buildWhatsAppMessage(b);
+        navigator.clipboard.writeText(msg).then(() => {
+          showToast("Job copied. Paste into WhatsApp driver group.");
+          window.open("https://web.whatsapp.com/", "_blank");
+        }).catch(() => {
+          window.open("https://wa.me/?text=" + encodeURIComponent(msg), "_blank");
+          showToast("Opened WhatsApp with message.");
+        });
+      });
+
+      // ——— Profit Report ———
+      let lastFilteredBookings = [];
+      document.getElementById("openProfitReport").onclick = () => {
+        document.getElementById("profitModal").classList.remove("hidden");
+      };
+      document.getElementById("closeProfitReport").onclick = () => {
+        document.getElementById("profitModal").classList.add("hidden");
+      };
+      document.getElementById("profitModal").addEventListener("click", (e) => {
+        if (e.target === document.getElementById("profitModal")) {
+          document.getElementById("profitModal").classList.add("hidden");
+        }
+      });
+
+      function getBookingDate(b) {
+        const s = b.date || b.createdAt;
+        if (!s) return null;
+        const d = new Date(s);
+        return isNaN(d.getTime()) ? null : d;
+      }
+
+      function runReport() {
+        const fromVal = document.getElementById("reportFrom").value;
+        const toVal = document.getElementById("reportTo").value;
+        const bookings = window.bookings || [];
+        let filtered = bookings;
+        if (fromVal || toVal) {
+          const fromMs = fromVal ? new Date(fromVal + "T00:00:00").getTime() : -Infinity;
+          const toMs = toVal ? new Date(toVal + "T23:59:59").getTime() : Infinity;
+          filtered = bookings.filter((b) => {
+            const d = getBookingDate(b);
+            if (!d) return false;
+            const t = d.getTime();
+            return t >= fromMs && t <= toMs;
+          });
+        }
+        lastFilteredBookings = filtered;
+        const totalBookings = filtered.length;
+        const totalRevenue = filtered.reduce((s, b) => s + (Number(b.customerPrice) || 0), 0);
+        const platformProfit = filtered.reduce((s, b) => s + (Number(b.platformProfit) || 0), 0);
+        const driverPayout = filtered.reduce((s, b) => s + (Number(b.driverPayout) || 0), 0);
+        const depositCollected = filtered.reduce((s, b) => s + (Number(b.deposit) || 0), 0);
+        const remainingBalance = filtered.reduce((s, b) => s + (Number(b.remainingBalance) || Number(b.remaining) || 0), 0);
+
+        const summaryEl = document.getElementById("reportSummary");
+        summaryEl.innerHTML =
+          '<div class="kpi"><div class="kpi__label">Total bookings</div><div class="kpi__value">' + totalBookings + "</div></div>" +
+          '<div class="kpi"><div class="kpi__label">Total revenue</div><div class="kpi__value">' + fmt(totalRevenue) + "</div></div>" +
+          '<div class="kpi"><div class="kpi__label">Platform profit</div><div class="kpi__value">' + fmt(platformProfit) + "</div></div>" +
+          '<div class="kpi"><div class="kpi__label">Driver payouts</div><div class="kpi__value">' + fmt(driverPayout) + "</div></div>" +
+          '<div class="kpi"><div class="kpi__label">Deposit collected</div><div class="kpi__value">' + fmt(depositCollected) + "</div></div>" +
+          '<div class="kpi"><div class="kpi__label">Remaining balance</div><div class="kpi__value">' + fmt(remainingBalance) + "</div></div>";
+
+        const tableEl = document.getElementById("reportTable");
+        if (!filtered.length) {
+          tableEl.innerHTML = '<tbody><tr><td colspan="8" class="empty">No bookings in date range</td></tr></tbody>';
+          return;
+        }
+        tableEl.innerHTML =
+          "<thead><tr><th>Booking ID</th><th>Date</th><th>Customer price</th><th>Platform profit</th><th>Driver payout</th><th>Deposit</th><th>Remaining</th><th>Status</th></tr></thead>" +
+          "<tbody>" +
+          filtered.map((b) => {
+            const id = b.id || b.bookingRef || "—";
+            const dateStr = formatDate(b.date || b.createdAt);
+            const statusHtml = statusBadge(b.status);
+            return (
+              "<tr>" +
+              "<td>" + id + "</td>" +
+              "<td>" + dateStr + "</td>" +
+              "<td>" + fmt(b.customerPrice) + "</td>" +
+              "<td>" + fmt(b.platformProfit) + "</td>" +
+              "<td>" + fmt(b.driverPayout) + "</td>" +
+              "<td>" + fmt(b.deposit) + "</td>" +
+              "<td>" + fmt(b.remainingBalance ?? b.remaining) + "</td>" +
+              "<td>" + statusHtml + "</td>" +
+              "</tr>"
+            );
+          }).join("") +
+          "</tbody>";
+      }
+
+      document.getElementById("runReport").onclick = runReport;
+
+      document.getElementById("exportReport").onclick = () => {
+        const rows = lastFilteredBookings;
+        if (!rows.length) {
+          showToast("Run report first to export.");
+          return;
+        }
+        const headers = ["Booking ID", "Date", "Customer price", "Platform profit", "Driver payout", "Deposit", "Remaining", "Status"];
+        const csvRows = [headers.join(",")];
+        function csvEsc(s) {
+          const t = String(s == null ? "" : s);
+          return t.includes(",") || t.includes('"') || t.includes("\n") ? '"' + t.replace(/"/g, '""') + '"' : t;
+        }
+        rows.forEach((b) => {
+          const id = csvEsc(b.id || b.bookingRef);
+          const dateStr = csvEsc(b.date || b.createdAt);
+          const cust = Number(b.customerPrice) || 0;
+          const plat = Number(b.platformProfit) || 0;
+          const drv = Number(b.driverPayout) || 0;
+          const dep = Number(b.deposit) || 0;
+          const rem = Number(b.remainingBalance ?? b.remaining) || 0;
+          const status = csvEsc(b.status);
+          csvRows.push([id, dateStr, cust, plat, drv, dep, rem, status].join(","));
+        });
+        const csv = csvRows.join("\n");
+        const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "profit-report-" + new Date().toISOString().slice(0, 10) + ".csv";
+        a.click();
+        URL.revokeObjectURL(url);
+        showToast("Report exported.");
+      };
 
       load();
     })();
