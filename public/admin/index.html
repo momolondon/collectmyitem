@@ -101,7 +101,7 @@
       <table>
         <thead>
           <tr>
-            <th>ID</th>
+            <th>Booking ref</th>
             <th>Date</th>
             <th>Phone</th>
             <th>Pickup</th>
@@ -187,7 +187,7 @@
 
       async function load() {
         const res = await fetch("/api/admin/bookings");
-        const bookings = await res.json();
+        const bookings = await res.json(); // Server returns only paid/paid_deposit with bookingRef
         window.bookings = bookings;
         const totalRevenue = bookings.reduce((s, b) => s + (Number(b.customerPrice) || 0), 0);
         const platformProfit = bookings.reduce((s, b) => s + (Number(b.platformProfit) || 0), 0);
@@ -207,16 +207,16 @@
 
         tbody.innerHTML = bookings
           .map((b) => {
-            const id = b.id || b.bookingRef;
+            const ref = b.bookingRef || "";
             const pickup = (b.pickupAddress || b.pickup || "").slice(0, 30) + ((b.pickupAddress || b.pickup || "").length > 30 ? "…" : "");
             const dropoff = (b.dropoffAddress || b.dropoff || "").slice(0, 30) + ((b.dropoffAddress || b.dropoff || "").length > 30 ? "…" : "");
             const markBtn = b.driverPaid
               ? ""
-              : '<button class="btn btn--sm btn--primary" data-id="' + id + '" data-action="mark-paid">Mark paid</button>';
+              : '<button class="btn btn--sm btn--primary" data-id="' + b.bookingRef + '" data-action="mark-paid">Mark paid</button>';
             const phone = (b.customerPhone || b.phone || "").trim();
             return (
               "<tr>" +
-              "<td>" + (id || "—") + "</td>" +
+              "<td>" + ref + "</td>" +
               "<td>" + formatDate(b.date || b.createdAt) + "</td>" +
               "<td>" + (phone || "—") + "</td>" +
               "<td>" + (pickup || "—") + "</td>" +
@@ -228,7 +228,7 @@
               "<td>" + fmt(b.remainingBalance) + "</td>" +
               "<td>" + statusBadge(b.status) + "</td>" +
               "<td>" + driverPaidBadge(b) + "</td>" +
-              '<td><button type="button" class="btn btn--sm btn--ghost" data-id="' + id + '" data-action="view">View</button> <button type="button" class="btn btn--sm btn--whatsapp" data-id="' + id + '" data-action="whatsapp" title="Copy to WhatsApp">WhatsApp</button> ' + markBtn + "</td>" +
+              '<td><button type="button" class="btn btn--sm btn--ghost" data-id="' + b.bookingRef + '" data-action="view">View</button> <button type="button" class="btn btn--sm btn--whatsapp" data-id="' + b.bookingRef + '" data-action="whatsapp" title="Copy to WhatsApp">WhatsApp</button> ' + markBtn + "</td>" +
               "</tr>"
             );
           })
@@ -236,11 +236,11 @@
 
         tbody.querySelectorAll("[data-action=mark-paid]").forEach((btn) => {
           btn.addEventListener("click", async () => {
-            const id = btn.getAttribute("data-id");
-            if (!id) return;
+            const bookingRef = btn.getAttribute("data-id");
+            if (!bookingRef) return;
             btn.disabled = true;
             try {
-              const r = await fetch("/api/admin/booking/" + encodeURIComponent(id) + "/mark-driver-paid", { method: "POST" });
+              const r = await fetch("/api/admin/booking/" + encodeURIComponent(bookingRef) + "/mark-driver-paid", { method: "POST" });
               const data = await r.json();
               if (r.ok) {
                 load();
@@ -257,9 +257,9 @@
 
         tbody.querySelectorAll("[data-action=view]").forEach((btn) => {
           btn.addEventListener("click", () => {
-            const id = btn.getAttribute("data-id");
-            if (!id) return;
-            showViewModal(id);
+            const bookingRef = btn.getAttribute("data-id");
+            if (!bookingRef) return;
+            showViewModal(bookingRef);
           });
         });
       }
@@ -283,26 +283,28 @@
         return "—";
       }
 
-      async function showViewModal(id) {
+      async function showViewModal(bookingRef) {
         const modal = document.getElementById("viewModal");
         const content = document.getElementById("modalContent");
         const title = document.getElementById("modalTitle");
         const fullLink = document.getElementById("modalFullLink");
-        fullLink.href = "/admin/booking/" + encodeURIComponent(id);
+        fullLink.href = "/admin/booking/" + encodeURIComponent(bookingRef);
         content.innerHTML = '<div class="empty">Loading…</div>';
         modal.classList.add("open");
         try {
-          const r = await fetch("/api/admin/booking/" + encodeURIComponent(id));
+          const r = await fetch("/api/admin/booking/" + encodeURIComponent(bookingRef));
           if (!r.ok) throw new Error("Not found");
           const b = await r.json();
           const distanceMiles = b.miles != null ? Number(b.miles).toFixed(1) + " miles" : "—";
           const stairsPickup = b.stairsPickup === "yes" ? "Yes" : "No";
           const stairsDropoff = b.stairsDropoff === "yes" ? "Yes" : "No";
-          title.textContent = "Booking " + (b.bookingRef || b.id);
+          title.textContent = "Booking " + (b.bookingRef || "");
+          const notes = (b.notes || "").trim();
           content.innerHTML =
             '<div class="modal__section"><div class="modal__label">Customer name</div><div class="modal__value">' + esc(b.customerName || b.name) + "</div></div>" +
             '<div class="modal__section"><div class="modal__label">Customer phone</div><div class="modal__value">' + esc(b.customerPhone || b.phone) + "</div></div>" +
             '<div class="modal__section"><div class="modal__label">Customer email</div><div class="modal__value">' + esc(b.customerEmail || b.email) + "</div></div>" +
+            (notes ? '<div class="modal__section"><div class="modal__label">Customer note</div><div class="modal__value">' + esc(notes) + "</div></div>" : "") +
             '<div class="modal__section"><div class="modal__label">Pickup address</div><div class="modal__value">' + esc(b.pickupAddress || b.pickup) + "</div></div>" +
             '<div class="modal__section"><div class="modal__label">Dropoff address</div><div class="modal__value">' + esc(b.dropoffAddress || b.dropoff) + "</div></div>" +
             '<div class="modal__section"><div class="modal__label">Items</div><div class="modal__value">' + esc(renderItems(b)) + "</div></div>" +
@@ -336,7 +338,7 @@
       }
 
       function buildWhatsAppMessage(b) {
-        const bookingId = b.id || b.bookingRef || "—";
+        const bookingId = b.bookingRef || "";
         const pickup = b.pickup && typeof b.pickup === "object" ? b.pickup : null;
         const dropoff = b.dropoff && typeof b.dropoff === "object" ? b.dropoff : null;
         const pickupPostcode = pickup?.postcode || extractPostcode(b.pickupAddress || b.pickup) || "—";
@@ -353,6 +355,7 @@
         const stairs = stairsPickup + " / " + stairsDropoff;
         const customerPrice = Number.isFinite(Number(b.customerPrice)) ? "£" + Number(b.customerPrice).toFixed(0) : "—";
         const driverPayout = Number.isFinite(Number(b.driverPayout)) ? "£" + Number(b.driverPayout).toFixed(0) : "—";
+        const notes = (b.notes || "").trim();
         return (
           "----------------------------------------\n" +
           "🚚 NEW DELIVERY JOB\n\n" +
@@ -362,6 +365,7 @@
           "Items: " + itemsSummary + "\n\n" +
           "Helpers: " + helpers + "\n" +
           "Stairs: " + stairs + "\n\n" +
+          (notes ? "Customer note: " + notes + "\n\n" : "") +
           "Customer price: " + customerPrice + "\n" +
           "Driver payout: " + driverPayout + "\n\n" +
           "Reply: ACCEPT " + bookingId + "\n" +
@@ -380,9 +384,9 @@
       document.addEventListener("click", (e) => {
         const btn = e.target.closest('[data-action="whatsapp"]');
         if (!btn) return;
-        const id = btn.getAttribute("data-id");
-        if (!id || !window.bookings) return;
-        const b = window.bookings.find((x) => (x.id || x.bookingRef) === id);
+        const bookingRef = btn.getAttribute("data-id");
+        if (!bookingRef || !window.bookings) return;
+        const b = window.bookings.find((x) => x.bookingRef === bookingRef);
         if (!b) return;
         const msg = buildWhatsAppMessage(b);
         navigator.clipboard.writeText(msg).then(() => {
@@ -453,15 +457,15 @@
           return;
         }
         tableEl.innerHTML =
-          "<thead><tr><th>Booking ID</th><th>Date</th><th>Customer price</th><th>Platform profit</th><th>Driver payout</th><th>Deposit</th><th>Remaining</th><th>Status</th></tr></thead>" +
+          "<thead><tr><th>Booking ref</th><th>Date</th><th>Customer price</th><th>Platform profit</th><th>Driver payout</th><th>Deposit</th><th>Remaining</th><th>Status</th></tr></thead>" +
           "<tbody>" +
           filtered.map((b) => {
-            const id = b.id || b.bookingRef || "—";
+            const ref = b.bookingRef || "";
             const dateStr = formatDate(b.date || b.createdAt);
             const statusHtml = statusBadge(b.status);
             return (
               "<tr>" +
-              "<td>" + id + "</td>" +
+              "<td>" + ref + "</td>" +
               "<td>" + dateStr + "</td>" +
               "<td>" + fmt(b.customerPrice) + "</td>" +
               "<td>" + fmt(b.platformProfit) + "</td>" +
@@ -483,14 +487,14 @@
           showToast("Run report first to export.");
           return;
         }
-        const headers = ["Booking ID", "Date", "Customer price", "Platform profit", "Driver payout", "Deposit", "Remaining", "Status"];
+        const headers = ["Booking ref", "Date", "Customer price", "Platform profit", "Driver payout", "Deposit", "Remaining", "Status"];
         const csvRows = [headers.join(",")];
         function csvEsc(s) {
           const t = String(s == null ? "" : s);
           return t.includes(",") || t.includes('"') || t.includes("\n") ? '"' + t.replace(/"/g, '""') + '"' : t;
         }
         rows.forEach((b) => {
-          const id = csvEsc(b.id || b.bookingRef);
+          const id = csvEsc(b.bookingRef || "");
           const dateStr = csvEsc(b.date || b.createdAt);
           const cust = Number(b.customerPrice) || 0;
           const plat = Number(b.platformProfit) || 0;

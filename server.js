@@ -95,12 +95,25 @@ const LONDON_CENTER_LNG = -0.1278;
 const LONDON_ZONE_RADIUS_MILES = 17; // rough "zones 1-6" radius
 
 // ------------------------------
+// Health check (BEFORE raw webhook - no JSON body)
+// ------------------------------
+
+app.get("/health", (req, res) => {
+  res.status(200).json({ ok: true });
+});
+
+// ------------------------------
 // Webhook MUST be raw and BEFORE express.json
 // ------------------------------
 
 app.post("/webhook", express.raw({ type: "application/json" }), (req, res) => {
   const sig = req.headers["stripe-signature"];
   const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
+
+  if (!endpointSecret) {
+    console.log("❌ Webhook Error: STRIPE_WEBHOOK_SECRET not set");
+    return res.sendStatus(500);
+  }
 
   let event;
   try {
@@ -110,26 +123,40 @@ app.post("/webhook", express.raw({ type: "application/json" }), (req, res) => {
     return res.sendStatus(400);
   }
 
+  const bookingRef = event.data?.object?.metadata?.bookingRef;
+  console.log("[webhook received] event=" + event.type + " bookingRef=" + (bookingRef || "—"));
+
   if (event.type === "checkout.session.completed") {
     const session = event.data.object;
-    const bookingRef = session.metadata?.bookingRef;
+    const ref = session.metadata?.bookingRef;
 
-    console.log("✅ Deposit payment confirmed for:", bookingRef);
-
-    if (bookingRef) {
-      const bookings = readBookings();
-      const booking = bookings.find((b) => b.bookingRef === bookingRef);
-      if (booking) {
-        booking.status = "paid_deposit";
-        booking.depositPaidAt = new Date().toISOString();
-        writeBookings(bookings);
-
-        // Send admin notification + customer confirmation emails
-        handleCheckoutSessionCompleted(session, booking).catch((err) => {
-          console.error("Webhook email error:", err);
-        });
-      }
+    if (!ref) {
+      console.log("[webhook] No bookingRef in metadata, ignoring");
+      return res.json({ received: true });
     }
+
+    // Only mark paid when Stripe confirms payment
+    if (session.payment_status !== "paid") {
+      console.log("[webhook] payment_status is '" + (session.payment_status || "—") + "', not marking as paid");
+      return res.json({ received: true });
+    }
+
+    const bookings = readBookings();
+    const booking = bookings.find((b) => b.bookingRef === ref);
+    if (!booking) {
+      console.log("[webhook] No booking found for bookingRef=" + ref);
+      return res.json({ received: true });
+    }
+
+    booking.status = "paid_deposit";
+    booking.depositPaidAt = new Date().toISOString();
+    writeBookings(bookings);
+    console.log("[booking marked paid] bookingRef=" + ref);
+
+    // Send admin notification + customer confirmation emails (after payment confirmed)
+    handleCheckoutSessionCompleted(session, booking).catch((err) => {
+      console.error("Webhook email error:", err);
+    });
   }
 
   res.json({ received: true });
@@ -269,7 +296,7 @@ function upsertBooking(data) {
       id: generateBookingId(),
       createdAt: now,
       updatedAt: now,
-      status: data.status || "pending_deposit",
+      status: data.status || "pending_payment",
       customerPrice: total,
       deposit,
       remainingBalance: remaining,
@@ -919,10 +946,18 @@ async function handleCheckout(req, res) {
       stairsDropoffFee: pricing.stairsDropoffFee,
       bulkyFee: pricing.bulkyFee ?? pricing.bulkyCharge,
       boxesFee: pricing.boxesFee,
-      status: "pending_deposit",
+      status: "pending_payment",
     });
 
-    const session = await stripe.checkout.sessions.create({
+    console.log("[booking created] bookingRef=" + bookingRef);
+
+    // Only pass customer_email to Stripe if valid (prevents "email_invalid" error)
+    const isValidEmail = (e) => {
+      const s = String(e || "").trim();
+      if (!s) return false;
+      return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
+    };
+    const checkoutOptions = {
       mode: "payment",
       payment_method_types: ["card"],
       line_items: [
@@ -937,13 +972,17 @@ async function handleCheckout(req, res) {
           quantity: 1,
         },
       ],
-      metadata: {
-        bookingRef,
-      },
+      metadata: { bookingRef },
       success_url: `${BASE_URL}/success.html?bookingRef=${encodeURIComponent(bookingRef)}`,
       cancel_url: `${BASE_URL}/cancel.html`,
-      ...(customerEmail && { customer_email: customerEmail }),
-    });
+    };
+    if (isValidEmail(customerEmail)) {
+      checkoutOptions.customer_email = customerEmail;
+    }
+
+    const session = await stripe.checkout.sessions.create(checkoutOptions);
+
+    console.log("[stripe session created] bookingRef=" + bookingRef + " sessionId=" + session.id);
 
     // Store Stripe session info to prevent duplicate sessions for the same bookingRef
     upsertBooking({
@@ -1004,24 +1043,32 @@ function normalizeBookingForAdmin(b) {
 }
 
 app.get("/api/admin/bookings", (req, res) => {
-  const bookings = readBookings().map(normalizeBookingForAdmin);
+  const all = readBookings().map(normalizeBookingForAdmin);
+  // Only show paid/paid_deposit bookings with bookingRef (hide pending, failed, etc.)
+  const DISPLAY_STATUSES = ["paid", "paid_deposit"];
+  const bookings = all.filter((b) => b.bookingRef && DISPLAY_STATUSES.includes(b.status || ""));
   res.json(bookings);
 });
 
 app.get("/api/admin/booking/:id", (req, res) => {
-  const id = req.params.id;
+  const ref = req.params.id; // id param is actually bookingRef
   const bookings = readBookings();
-  const booking = bookings.find((b) => b.id === id || b.bookingRef === id);
-  if (!booking) {
+  const booking = bookings.find((b) => b.bookingRef === ref);
+  if (!booking || !booking.bookingRef) {
+    return res.status(404).json({ error: "Booking not found" });
+  }
+  // Only allow viewing paid bookings (or admin could see any by ref for debugging - keep as is for admin)
+  const DISPLAY_STATUSES = ["paid", "paid_deposit"];
+  if (!DISPLAY_STATUSES.includes(booking.status || "")) {
     return res.status(404).json({ error: "Booking not found" });
   }
   res.json(normalizeBookingForAdmin(booking));
 });
 
 app.post("/api/admin/booking/:id/mark-driver-paid", (req, res) => {
-  const id = req.params.id;
+  const ref = req.params.id; // id param is actually bookingRef
   const bookings = readBookings();
-  const idx = bookings.findIndex((b) => b.id === id || b.bookingRef === id);
+  const idx = bookings.findIndex((b) => b.bookingRef === ref);
   if (idx === -1) {
     return res.status(404).json({ error: "Booking not found" });
   }
