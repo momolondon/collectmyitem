@@ -2,7 +2,8 @@ const express = require("express");
 const cors = require("cors");
 const fs = require("fs");
 const path = require("path");
-require("dotenv").config();
+// Load .env from project root (next to server.js) regardless of cwd
+require("dotenv").config({ path: path.join(__dirname, ".env") });
 
 const Stripe = require("stripe");
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
@@ -174,8 +175,8 @@ app.use(express.json());
 // ------------------------------
 
 function basicAuth(req, res, next) {
-  const expectedUser = process.env.ADMIN_USERNAME;
-  const expectedPass = process.env.ADMIN_PASSWORD;
+  const expectedUser = (process.env.ADMIN_USERNAME || "").trim();
+  const expectedPass = (process.env.ADMIN_PASSWORD || "").trim();
   if (!expectedUser || !expectedPass) {
     console.warn("⚠️ ADMIN_USERNAME and ADMIN_PASSWORD must be set for admin protection.");
     return res.status(401).setHeader("WWW-Authenticate", 'Basic realm="Admin"').send("Unauthorized");
@@ -194,8 +195,8 @@ function basicAuth(req, res, next) {
   }
 
   const colonIndex = decoded.indexOf(":");
-  const username = colonIndex >= 0 ? decoded.slice(0, colonIndex) : decoded;
-  const password = colonIndex >= 0 ? decoded.slice(colonIndex + 1) : "";
+  const username = (colonIndex >= 0 ? decoded.slice(0, colonIndex) : decoded).trim();
+  const password = (colonIndex >= 0 ? decoded.slice(colonIndex + 1) : "").trim();
 
   if (username !== expectedUser || password !== expectedPass) {
     return res.status(401).setHeader("WWW-Authenticate", 'Basic realm="Admin"').send("Unauthorized");
