@@ -277,6 +277,15 @@ function isValidPostcode(pc) {
   return /^[A-Z]{1,2}\d[A-Z0-9]?\d[A-Z]{2}$/.test(s);
 }
 
+/** UK mobile: 07xxx xxxxxx or +447xxxxxxxxx — 11 digits after +44 or starting 07 */
+function isValidUKPhone(str) {
+  const s = String(str || "").trim().replace(/\s+/g, "");
+  if (!s) return false;
+  if (/^\+447\d{9}$/.test(s)) return true;
+  if (/^07\d{9}$/.test(s)) return true;
+  return false;
+}
+
 /**
  * London Congestion Charge: allowed postcode outward codes only.
  * Exact match only (e.g. SE1 in, SE12/SE13/etc out).
@@ -721,6 +730,12 @@ async function handleCheckout(req, res) {
     const body = req.body || {};
     const isNewFlow = isNewPricePayload(body);
 
+    // Phone number is REQUIRED — do not create Stripe session without it
+    const phone = (body.customerPhone || body.phone || "").trim();
+    if (!phone) {
+      return res.status(400).json({ error: "Phone number is required" });
+    }
+
     // Resolve pickup/dropoff postcodes and addresses
     let pickupPostcode = "";
     let dropoffPostcode = "";
@@ -773,6 +788,11 @@ async function handleCheckout(req, res) {
       return res
         .status(400)
         .json({ error: "Name and mobile number are required to book." });
+    }
+    if (!isValidUKPhone(customerPhone)) {
+      return res
+        .status(400)
+        .json({ error: "Please enter a valid UK mobile number (e.g. 07700 900123)." });
     }
 
     // Idempotency / duplicate booking protection
