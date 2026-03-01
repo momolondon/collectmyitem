@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="icon" type="image/png" href="/images/favicon.png">
   <title>Admin — Collect My Item</title>
   <style>
     * { box-sizing: border-box; }
@@ -57,6 +58,19 @@
     .report-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 20px; }
     .report-summary .kpi { margin: 0; }
     .modal__inner--wide { max-width: 900px; }
+    body { overflow-x: hidden; }
+    @media (max-width: 480px) {
+      .container { padding: 12px; }
+      .kpis { grid-template-columns: 1fr; gap: 12px; margin-bottom: 24px; }
+      .kpi { padding: 16px; }
+      th, td { padding: 10px 12px; font-size: 0.9rem; }
+      .btn { min-height: 44px; padding: 10px 16px; display: inline-flex; align-items: center; }
+      .modal { padding: 12px; }
+      .modal__inner { padding: 18px; max-height: 85vh; }
+    }
+    @media (max-width: 360px) {
+      .container { padding: 10px; }
+    }
   </style>
 </head>
 <body>

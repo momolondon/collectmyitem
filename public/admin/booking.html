@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="icon" type="image/png" href="/images/favicon.png">
   <title>Booking — Admin — Collect My Item</title>
   <style>
     * { box-sizing: border-box; }
@@ -34,6 +35,16 @@
     .badge--unpaid { background: #7f1d1d; color: #fca5a5; }
     .error { color: #f87171; padding: 20px; }
     .loading { color: #64748b; padding: 40px; text-align: center; }
+    body { overflow-x: hidden; }
+    @media (max-width: 480px) {
+      .container { padding: 12px; }
+      .card { padding: 18px; }
+      .btn { min-height: 44px; padding: 12px 18px; display: inline-flex; align-items: center; }
+    }
+    @media (max-width: 360px) {
+      .container { padding: 10px; }
+      .card { padding: 16px; }
+    }
   </style>
 </head>
 <body>
