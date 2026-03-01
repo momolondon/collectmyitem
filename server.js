@@ -6,6 +6,7 @@ require("dotenv").config();
 
 const Stripe = require("stripe");
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+const { handleCheckoutSessionCompleted } = require("./webhook");
 
 const app = express();
 const PORT = process.env.PORT || 4242;
@@ -122,6 +123,11 @@ app.post("/webhook", express.raw({ type: "application/json" }), (req, res) => {
         booking.status = "paid_deposit";
         booking.depositPaidAt = new Date().toISOString();
         writeBookings(bookings);
+
+        // Send admin notification + customer confirmation emails
+        handleCheckoutSessionCompleted(session, booking).catch((err) => {
+          console.error("Webhook email error:", err);
+        });
       }
     }
   }
@@ -878,11 +884,7 @@ async function handleCheckout(req, res) {
       },
       success_url: `${BASE_URL}/success.html?bookingRef=${encodeURIComponent(bookingRef)}`,
       cancel_url: `${BASE_URL}/cancel.html`,
-      ...(customerEmail && {
-        payment_intent_data: {
-          receipt_email: customerEmail,
-        },
-      }),
+      ...(customerEmail && { customer_email: customerEmail }),
     });
 
     // Store Stripe session info to prevent duplicate sessions for the same bookingRef
