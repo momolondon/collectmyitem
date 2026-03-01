@@ -142,7 +142,45 @@ app.post("/webhook", express.raw({ type: "application/json" }), (req, res) => {
 app.use(cors());
 app.use(express.json());
 
+// ------------------------------
+// Basic Auth for admin panel
+// ------------------------------
+
+function basicAuth(req, res, next) {
+  const expectedUser = process.env.ADMIN_USERNAME;
+  const expectedPass = process.env.ADMIN_PASSWORD;
+  if (!expectedUser || !expectedPass) {
+    console.warn("⚠️ ADMIN_USERNAME and ADMIN_PASSWORD must be set for admin protection.");
+    return res.status(401).setHeader("WWW-Authenticate", 'Basic realm="Admin"').send("Unauthorized");
+  }
+
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith("Basic ")) {
+    return res.status(401).setHeader("WWW-Authenticate", 'Basic realm="Admin"').send("Unauthorized");
+  }
+
+  let decoded;
+  try {
+    decoded = Buffer.from(authHeader.slice(6), "base64").toString("utf8");
+  } catch {
+    return res.status(401).setHeader("WWW-Authenticate", 'Basic realm="Admin"').send("Unauthorized");
+  }
+
+  const colonIndex = decoded.indexOf(":");
+  const username = colonIndex >= 0 ? decoded.slice(0, colonIndex) : decoded;
+  const password = colonIndex >= 0 ? decoded.slice(colonIndex + 1) : "";
+
+  if (username !== expectedUser || password !== expectedPass) {
+    return res.status(401).setHeader("WWW-Authenticate", 'Basic realm="Admin"').send("Unauthorized");
+  }
+
+  next();
+}
+
 // Admin routes BEFORE static (so /admin and /admin/booking/:id are matched)
+app.use("/admin", basicAuth);
+app.use("/api/admin", basicAuth);
+
 app.get("/admin", (req, res) => {
   res.sendFile(path.join(PUBLIC_DIR, "admin", "index.html"));
 });
