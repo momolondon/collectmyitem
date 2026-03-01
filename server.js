@@ -878,6 +878,11 @@ async function handleCheckout(req, res) {
       },
       success_url: `${BASE_URL}/success.html?bookingRef=${encodeURIComponent(bookingRef)}`,
       cancel_url: `${BASE_URL}/cancel.html`,
+      ...(customerEmail && {
+        payment_intent_data: {
+          receipt_email: customerEmail,
+        },
+      }),
     });
 
     // Store Stripe session info to prevent duplicate sessions for the same bookingRef
