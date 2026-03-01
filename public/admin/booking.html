@@ -33,6 +33,8 @@
     .badge { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 0.8rem; }
     .badge--paid { background: #065f46; color: #6ee7b7; }
     .badge--unpaid { background: #7f1d1d; color: #fca5a5; }
+    .driver-paid-cb { width: 20px; height: 20px; cursor: pointer; accent-color: #059669; }
+    .driver-paid-cb:disabled { cursor: not-allowed; opacity: 0.5; }
     .error { color: #f87171; padding: 20px; }
     .loading { color: #64748b; padding: 40px; text-align: center; }
     body { overflow-x: hidden; }
@@ -140,7 +142,7 @@
           const customerName = b.customerName || b.name || "";
           const customerPhone = b.customerPhone || b.phone || "";
           const customerEmail = b.customerEmail || b.email || "";
-          const notes = b.notes || "";
+          const customerNote = (b.customerNote ?? b.notes ?? "").trim();
           const distanceMiles = b.miles != null ? (Number(b.miles).toFixed(1) + " miles") : "—";
           const stairsPickup = b.stairsPickup === "yes" ? "Yes" : "No";
           const stairsDropoff = b.stairsDropoff === "yes" ? "Yes" : "No";
@@ -149,11 +151,11 @@
             '<div class="row"><div class="label">Name</div><div class="value">' + esc(customerName) + "</div></div>" +
             '<div class="row"><div class="label">Phone</div><div class="value">' + esc(customerPhone) + "</div></div>" +
             '<div class="row"><div class="label">Email</div><div class="value">' + esc(customerEmail) + "</div></div>" +
-            (notes ? '<div class="row"><div class="label">Notes</div><div class="value">' + esc(notes) + "</div></div>" : "") +
+            '<div class="row"><div class="label">Customer note</div><div class="value">' + esc(customerNote || "—") + "</div></div>" +
             "</div>";
 
           content.innerHTML =
-            '<h1>Booking ' + (b.bookingRef || b.id) + '</h1>' +
+            '<h1>Booking ' + (b.bookingRef || "") + '</h1>' +
             customerCard +
             '<div class="card">' +
             '<h2>Addresses &amp; time</h2>' +
@@ -176,23 +178,43 @@
             '<div class="card">' +
             '<h2>Payment</h2>' +
             '<div class="row"><div class="label">Customer price</div><div class="value">' + fmt(b.customerPrice) + "</div></div>" +
-            '<div class="row"><div class="label">Deposit paid</div><div class="value">' + fmt(b.deposit) + "</div></div>" +
-            '<div class="row"><div class="label">Remaining balance</div><div class="value">' + fmt(b.remainingBalance) + "</div></div>" +
+            '<div class="row"><div class="label">Deposit/Profit</div><div class="value">' + fmt(b.deposit) + "</div></div>" +
+            '<div class="row"><div class="label">Driver payout/Remaining</div><div class="value">' + fmt(b.driverPayout) + "</div></div>" +
             "</div>" +
             '<div class="card">' +
-            '<h2>Platform &amp; driver</h2>' +
-            '<div class="row"><div class="label">Platform profit</div><div class="value">' + fmt(b.platformProfit) + "</div></div>" +
-            '<div class="row"><div class="label">Driver payout</div><div class="value">' + fmt(b.driverPayout) + "</div></div>" +
-            '<div class="row"><div class="label">Driver paid</div><div class="value">' + (b.driverPaid ? '<span class="badge badge--paid">Yes</span> ' + formatDate(b.driverPaidAt) : '<span class="badge badge--unpaid">No</span>') + "</div></div>" +
-            "</div>" +
-            (b.driverPaid
-              ? ""
-              : '<p><button id="markPaidBtn" class="btn btn--primary">Mark driver paid</button></p>');
+            '<h2>Job &amp; driver</h2>' +
+            '<div class="row"><div class="label">Job status</div><div class="value">' + (b.jobStatus === "done" ? '<span class="badge badge--paid">done</span>' : '<span class="badge badge--pending">pending</span>') + "</div></div>" +
+            (b.jobStatus !== "done" ? '<p><button id="markDoneBtn" class="btn btn--primary">Mark done</button></p>' : "") +
+            '<div class="row" style="margin-top: 16px;"><div class="label">Driver paid</div><div class="value">' +
+            '<input type="checkbox" id="driverPaidCb" class="driver-paid-cb" data-id="' + esc(id) + '"' + (b.driverPaid ? ' checked' : '') + (b.jobStatus !== "done" ? ' disabled' : '') + ' title="Driver paid" aria-label="Driver paid">' +
+            (b.driverPaid && b.driverPaidAt ? ' <span style="margin-left: 8px; color: #94a3b8; font-size: 0.9rem;">' + formatDate(b.driverPaidAt) + "</span>" : "") +
+            "</div></div>" +
+            "</div>";
 
-          const markBtn = document.getElementById("markPaidBtn");
-          if (markBtn) {
-            markBtn.addEventListener("click", async () => {
-              markBtn.disabled = true;
+          const markDoneBtn = document.getElementById("markDoneBtn");
+          if (markDoneBtn) {
+            markDoneBtn.addEventListener("click", async () => {
+              markDoneBtn.disabled = true;
+              try {
+                const r = await fetch("/api/admin/booking/" + encodeURIComponent(id) + "/mark-done", { method: "POST" });
+                const data = await r.json();
+                if (r.ok) {
+                  load();
+                } else {
+                  alert(data.error || "Failed");
+                  markDoneBtn.disabled = false;
+                }
+              } catch (e) {
+                alert("Network error");
+                markDoneBtn.disabled = false;
+              }
+            });
+          }
+          const driverPaidCb = document.getElementById("driverPaidCb");
+          if (driverPaidCb && !driverPaidCb.disabled) {
+            driverPaidCb.addEventListener("change", async function () {
+              if (!this.checked) return;
+              this.disabled = true;
               try {
                 const r = await fetch("/api/admin/booking/" + encodeURIComponent(id) + "/mark-driver-paid", { method: "POST" });
                 const data = await r.json();
@@ -200,11 +222,13 @@
                   load();
                 } else {
                   alert(data.error || "Failed");
-                  markBtn.disabled = false;
+                  this.checked = false;
+                  this.disabled = false;
                 }
               } catch (e) {
                 alert("Network error");
-                markBtn.disabled = false;
+                this.checked = false;
+                this.disabled = false;
               }
             });
           }

@@ -150,6 +150,7 @@ app.post("/webhook", express.raw({ type: "application/json" }), (req, res) => {
     }
 
     booking.status = "paid_deposit";
+    booking.jobStatus = booking.jobStatus ?? "pending";
     booking.depositPaidAt = new Date().toISOString();
     writeBookings(bookings);
     console.log("[booking marked paid] bookingRef=" + ref);
@@ -298,6 +299,7 @@ function upsertBooking(data) {
       createdAt: now,
       updatedAt: now,
       status: data.status || "pending_payment",
+      jobStatus: data.jobStatus ?? "pending",
       customerPrice: total,
       deposit,
       remainingBalance: remaining,
@@ -307,6 +309,7 @@ function upsertBooking(data) {
       driverPaidAt: null,
       pickupAddress: data.pickupFullAddress || data.pickupAddress || data.pickup || "",
       dropoffAddress: data.dropoffFullAddress || data.dropoffAddress || data.dropoff || "",
+      customerNote: (data.customerNote ?? data.note ?? data.notes ?? "").trim(),
     };
     bookings.push(booking);
   } else {
@@ -848,7 +851,7 @@ async function handleCheckout(req, res) {
     const customerName = (body.customerName || body.name || "").trim();
     const customerPhone = (body.customerPhone || body.phone || "").trim();
     const customerEmail = (body.customerEmail || body.email || "").trim();
-    const notes = (body.notes || "").trim();
+    const customerNote = (body.note || body.customerNote || body.notes || "").trim();
 
     if (!customerName || !customerPhone) {
       return res
@@ -924,7 +927,8 @@ async function handleCheckout(req, res) {
       customerName,
       customerPhone,
       customerEmail,
-      notes,
+      customerNote,
+      notes: customerNote,
       name: customerName,
       phone: customerPhone,
       email: customerEmail,
@@ -1038,16 +1042,20 @@ function normalizeBookingForAdmin(b) {
     driverPaid: Boolean(b.driverPaid),
     driverPaidAt: b.driverPaidAt ?? null,
     status: b.status ?? "pending",
+    jobStatus: (b.jobStatus === "done" ? "done" : "pending"),
     pickupAddress: b.pickupAddress ?? b.pickup ?? "",
     dropoffAddress: b.dropoffAddress ?? b.dropoff ?? "",
+    customerNote: (b.customerNote ?? b.notes ?? "").trim(),
   };
 }
 
 app.get("/api/admin/bookings", (req, res) => {
   const all = readBookings().map(normalizeBookingForAdmin);
-  // Only show paid/paid_deposit bookings with bookingRef (hide pending, failed, etc.)
+  // Only show Stripe-confirmed paid bookings with valid bookingRef (hide test/failed/incomplete)
   const DISPLAY_STATUSES = ["paid", "paid_deposit"];
-  const bookings = all.filter((b) => b.bookingRef && DISPLAY_STATUSES.includes(b.status || ""));
+  const bookings = all.filter(
+    (b) => b.bookingRef && String(b.bookingRef).trim() && DISPLAY_STATUSES.includes(b.status || "")
+  );
   res.json(bookings);
 });
 
@@ -1066,17 +1074,34 @@ app.get("/api/admin/booking/:id", (req, res) => {
   res.json(normalizeBookingForAdmin(booking));
 });
 
+app.post("/api/admin/booking/:id/mark-done", (req, res) => {
+  const ref = req.params.id;
+  const bookings = readBookings();
+  let idx = bookings.findIndex((b) => b.bookingRef === ref || (b.id && String(b.id) === ref));
+  if (idx === -1) {
+    return res.status(404).json({ error: "Booking not found" });
+  }
+  const booking = bookings[idx];
+  const now = new Date().toISOString();
+  booking.jobStatus = "done";
+  booking.updatedAt = now;
+  try {
+    writeBookings(bookings);
+  } catch (err) {
+    console.error("[mark-done] writeBookings failed:", err.message);
+    return res.status(500).json({ error: "Failed to save booking: " + err.message });
+  }
+  res.json({ ok: true, booking: normalizeBookingForAdmin(booking) });
+});
+
 app.post("/api/admin/booking/:id/mark-driver-paid", (req, res) => {
-  const ref = req.params.id; // id param is actually bookingRef
+  const ref = req.params.id;
   const bookings = readBookings();
   const idx = bookings.findIndex((b) => b.bookingRef === ref);
   if (idx === -1) {
     return res.status(404).json({ error: "Booking not found" });
   }
   const booking = bookings[idx];
-  if (booking.driverPaid) {
-    return res.status(400).json({ error: "Driver already marked as paid" });
-  }
   const now = new Date().toISOString();
   booking.driverPaid = true;
   booking.driverPaidAt = now;

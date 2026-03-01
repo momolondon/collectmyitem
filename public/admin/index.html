@@ -19,8 +19,22 @@
     th, td { padding: 12px 16px; text-align: left; border-bottom: 1px solid #334155; }
     th { background: #0f172a; font-weight: 600; font-size: 0.85rem; }
     tr:hover { background: rgba(255,255,255,.03); }
-    .btn { display: inline-block; padding: 8px 14px; border-radius: 8px; text-decoration: none; font-size: 0.9rem; cursor: pointer; border: none; }
+    th.col-ref, td.col-ref { position: sticky; left: 0; z-index: 2; background: #1e293b; min-width: 100px; width: 100px; box-shadow: 2px 0 4px rgba(0,0,0,.15); }
+    th.col-ref { background: #0f172a; }
+    tr:hover td.col-ref { background: rgba(30,41,59,.98); }
+    th.col-actions, td.col-actions { position: sticky; left: 100px; z-index: 2; background: #1e293b; min-width: 96px; white-space: nowrap; box-shadow: 2px 0 4px rgba(0,0,0,.15); }
+    th.col-actions { background: #0f172a; }
+    tr:hover td.col-actions { background: rgba(30,41,59,.98); }
+    .actions-stack { display: flex; flex-direction: row; flex-wrap: wrap; gap: 4px; align-items: center; }
+    .actions-stack .btn--action { min-height: 28px; padding: 4px 8px; font-size: 0.78rem; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; gap: 4px; width: auto; }
+    .actions-dropdown { display: none; position: relative; }
+    .actions-dropdown .btn--trigger { min-height: 28px; padding: 4px 8px; font-size: 0.78rem; border-radius: 6px; }
+    .actions-dropdown .actions-menu { display: none; position: absolute; top: 100%; left: 0; margin-top: 4px; background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 6px; min-width: 120px; z-index: 10; box-shadow: 0 4px 12px rgba(0,0,0,.4); }
+    .actions-dropdown.open .actions-menu { display: flex; flex-direction: column; gap: 4px; }
+    .actions-dropdown .actions-menu .btn { min-height: 28px; padding: 4px 8px; font-size: 0.78rem; border-radius: 6px; justify-content: flex-start; }
+    .btn { display: inline-flex; align-items: center; padding: 8px 14px; border-radius: 10px; text-decoration: none; font-size: 0.9rem; cursor: pointer; border: none; }
     .btn--sm { padding: 6px 10px; font-size: 0.85rem; }
+    .note-icon-btn { padding: 4px 8px; min-width: auto; font-size: 1rem; }
     .btn--primary { background: #3b82f6; color: #fff; }
     .btn--primary:hover { background: #2563eb; }
     .btn--ghost { background: transparent; color: #94a3b8; }
@@ -44,6 +58,8 @@
     .modal__link:hover { text-decoration: underline; }
     .btn--whatsapp { background: #25d366; color: #fff; }
     .btn--whatsapp:hover { background: #20bd5a; }
+    .driver-paid-cb { width: 20px; height: 20px; cursor: pointer; accent-color: #059669; }
+    .driver-paid-cb:disabled { cursor: not-allowed; opacity: 0.5; }
     .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: #1e293b; color: #e2e8f0; padding: 10px 20px; border-radius: 8px; font-size: 0.9rem; box-shadow: 0 4px 12px rgba(0,0,0,.4); z-index: 200; animation: toast-in .2s ease; }
     @keyframes toast-in { from { opacity: 0; transform: translateX(-50%) translateY(10px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
     .header-row { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; margin-bottom: 24px; }
@@ -59,6 +75,12 @@
     .report-summary .kpi { margin: 0; }
     .modal__inner--wide { max-width: 900px; }
     body { overflow-x: hidden; }
+    @media (max-width: 768px) {
+      .actions-stack { display: none; }
+      .actions-dropdown { display: block; }
+      th.col-actions, td.col-actions { min-width: 96px; left: 90px; }
+      th.col-ref, td.col-ref { min-width: 90px; }
+    }
     @media (max-width: 480px) {
       .container { padding: 12px; }
       .kpis { grid-template-columns: 1fr; gap: 12px; margin-bottom: 24px; }
@@ -101,23 +123,22 @@
       <table>
         <thead>
           <tr>
-            <th>Booking ref</th>
+            <th class="col-ref">Booking ref</th>
+            <th class="col-actions">Actions</th>
             <th>Date</th>
             <th>Phone</th>
+            <th>Note</th>
             <th>Pickup</th>
             <th>Dropoff</th>
             <th>Customer price</th>
-            <th>Platform profit</th>
-            <th>Driver payout</th>
-            <th>Deposit</th>
-            <th>Remaining</th>
-            <th>Status</th>
+            <th>Deposit/Profit</th>
+            <th>Driver payout/Remaining</th>
+            <th>Job status</th>
             <th>Driver paid</th>
-            <th>Actions</th>
           </tr>
         </thead>
         <tbody id="tbody">
-          <tr><td colspan="13" class="empty">Loading…</td></tr>
+          <tr><td colspan="11" class="empty">Loading…</td></tr>
         </tbody>
       </table>
     </div>
@@ -173,16 +194,16 @@
         return Number.isFinite(n) ? "£" + n.toFixed(0) : "—";
       }
 
-      function statusBadge(s) {
-        const c = (s || "").toLowerCase();
-        if (c === "paid_deposit") return '<span class="badge badge--pending">Paid deposit</span>';
-        if (c === "pending" || c === "pending_deposit") return '<span class="badge badge--pending">Pending</span>';
-        return '<span class="badge">' + (s || "—") + "</span>";
+      function jobStatusBadge(s) {
+        const c = (s || "pending").toLowerCase();
+        if (c === "done") return '<span class="badge badge--paid">done</span>';
+        return '<span class="badge badge--pending">pending</span>';
       }
 
-      function driverPaidBadge(b) {
-        if (b.driverPaid) return '<span class="badge badge--paid">Yes</span>';
-        return '<span class="badge badge--unpaid">No</span>';
+      function driverPaidCheckbox(b) {
+        const checked = b.driverPaid ? ' checked' : '';
+        const disabled = (b.jobStatus || 'pending') !== 'done' ? ' disabled' : '';
+        return '<input type="checkbox" class="driver-paid-cb" data-id="' + (b.bookingRef || '') + '"' + checked + disabled + ' title="Driver paid" aria-label="Driver paid">';
       }
 
       async function load() {
@@ -201,47 +222,71 @@
         driverPayoutsOwedEl.textContent = fmt(driverPayoutsOwed);
 
         if (!bookings.length) {
-          tbody.innerHTML = '<tr><td colspan="13" class="empty">No bookings yet</td></tr>';
+          tbody.innerHTML = '<tr><td colspan="12" class="empty">No bookings yet</td></tr>';
           return;
         }
 
         tbody.innerHTML = bookings
           .map((b) => {
             const ref = b.bookingRef || "";
+            const noteVal = (b.customerNote ?? b.notes ?? "").trim();
+            const noteCell = noteVal
+              ? '<button type="button" class="btn btn--sm btn--ghost note-icon-btn" data-id="' + ref + '" data-action="view" title="View customer note">📝</button>'
+              : "—";
             const pickup = (b.pickupAddress || b.pickup || "").slice(0, 30) + ((b.pickupAddress || b.pickup || "").length > 30 ? "…" : "");
             const dropoff = (b.dropoffAddress || b.dropoff || "").slice(0, 30) + ((b.dropoffAddress || b.dropoff || "").length > 30 ? "…" : "");
-            const markBtn = b.driverPaid
+            const jobStatus = b.jobStatus || "pending";
+            const markDoneBtn = jobStatus === "done"
               ? ""
-              : '<button class="btn btn--sm btn--primary" data-id="' + b.bookingRef + '" data-action="mark-paid">Mark paid</button>';
+              : '<button type="button" class="btn btn--action btn--primary" data-id="' + b.bookingRef + '" data-action="mark-done">✅ Mark done</button>';
+            const viewBtn = '<button type="button" class="btn btn--action btn--ghost" data-id="' + b.bookingRef + '" data-action="view">👁 View</button>';
+            const whatsappBtn = '<button type="button" class="btn btn--action btn--whatsapp" data-id="' + b.bookingRef + '" data-action="whatsapp" title="Copy to WhatsApp">💬 WhatsApp</button>';
+            const actionsHtml =
+              '<div class="actions-stack">' +
+              viewBtn + whatsappBtn + markDoneBtn +
+              '</div>' +
+              '<div class="actions-dropdown">' +
+              '<button type="button" class="btn btn--trigger btn--ghost" aria-haspopup="true" aria-expanded="false">Actions ▾</button>' +
+              '<div class="actions-menu">' +
+              viewBtn + whatsappBtn + markDoneBtn +
+              '</div></div>';
             const phone = (b.customerPhone || b.phone || "").trim();
             return (
               "<tr>" +
-              "<td>" + ref + "</td>" +
+              '<td class="col-ref">' + ref + "</td>" +
+              '<td class="col-actions">' + actionsHtml + "</td>" +
               "<td>" + formatDate(b.date || b.createdAt) + "</td>" +
               "<td>" + (phone || "—") + "</td>" +
+              "<td>" + noteCell + "</td>" +
               "<td>" + (pickup || "—") + "</td>" +
               "<td>" + (dropoff || "—") + "</td>" +
               "<td>" + fmt(b.customerPrice) + "</td>" +
-              "<td>" + fmt(b.platformProfit) + "</td>" +
-              "<td>" + fmt(b.driverPayout) + "</td>" +
               "<td>" + fmt(b.deposit) + "</td>" +
-              "<td>" + fmt(b.remainingBalance) + "</td>" +
-              "<td>" + statusBadge(b.status) + "</td>" +
-              "<td>" + driverPaidBadge(b) + "</td>" +
-              '<td><button type="button" class="btn btn--sm btn--ghost" data-id="' + b.bookingRef + '" data-action="view">View</button> <button type="button" class="btn btn--sm btn--whatsapp" data-id="' + b.bookingRef + '" data-action="whatsapp" title="Copy to WhatsApp">WhatsApp</button> ' + markBtn + "</td>" +
+              "<td>" + fmt(b.driverPayout) + "</td>" +
+              "<td>" + jobStatusBadge(jobStatus) + "</td>" +
+              "<td>" + driverPaidCheckbox(b) + "</td>" +
               "</tr>"
             );
           })
           .join("");
 
-        tbody.querySelectorAll("[data-action=mark-paid]").forEach((btn) => {
+        tbody.querySelectorAll("[data-action=mark-done]").forEach((btn) => {
           btn.addEventListener("click", async () => {
             const bookingRef = btn.getAttribute("data-id");
             if (!bookingRef) return;
+            btn.closest(".actions-dropdown")?.classList.remove("open");
             btn.disabled = true;
             try {
-              const r = await fetch("/api/admin/booking/" + encodeURIComponent(bookingRef) + "/mark-driver-paid", { method: "POST" });
-              const data = await r.json();
+              const r = await fetch("/api/admin/booking/" + encodeURIComponent(bookingRef) + "/mark-done", { method: "POST" });
+              let data;
+              try {
+                data = await r.json();
+              } catch (_) {
+                const text = await r.text();
+                alert("Error " + r.status + ": " + (text.slice(0, 100) || "Invalid response"));
+                btn.disabled = false;
+                return;
+              }
               if (r.ok) {
                 load();
               } else {
@@ -249,8 +294,32 @@
                 btn.disabled = false;
               }
             } catch (e) {
-              alert("Network error");
+              alert("Network error: " + (e.message || e));
               btn.disabled = false;
+            }
+          });
+        });
+
+        tbody.querySelectorAll(".driver-paid-cb").forEach((cb) => {
+          cb.addEventListener("change", async function () {
+            if (!this.checked) return;
+            const bookingRef = this.getAttribute("data-id");
+            if (!bookingRef) return;
+            this.disabled = true;
+            try {
+              const r = await fetch("/api/admin/booking/" + encodeURIComponent(bookingRef) + "/mark-driver-paid", { method: "POST" });
+              const data = await r.json();
+              if (r.ok) {
+                load();
+              } else {
+                alert(data.error || "Failed");
+                this.checked = false;
+                this.disabled = false;
+              }
+            } catch (e) {
+              alert("Network error");
+              this.checked = false;
+              this.disabled = false;
             }
           });
         });
@@ -259,10 +328,34 @@
           btn.addEventListener("click", () => {
             const bookingRef = btn.getAttribute("data-id");
             if (!bookingRef) return;
+            btn.closest(".actions-dropdown")?.classList.remove("open");
             showViewModal(bookingRef);
           });
         });
+
+        tbody.querySelectorAll(".actions-dropdown .btn--trigger").forEach((trigger) => {
+          trigger.addEventListener("click", (e) => {
+            e.stopPropagation();
+            const wrap = trigger.closest(".actions-dropdown");
+            const isOpen = wrap.classList.contains("open");
+            tbody.querySelectorAll(".actions-dropdown.open").forEach((o) => o.classList.remove("open"));
+            if (!isOpen) {
+              wrap.classList.add("open");
+              trigger.setAttribute("aria-expanded", "true");
+            } else {
+              trigger.setAttribute("aria-expanded", "false");
+            }
+          });
+        });
       }
+
+      document.addEventListener("click", () => {
+        tbody.querySelectorAll(".actions-dropdown.open").forEach((wrap) => {
+          wrap.classList.remove("open");
+          const t = wrap.querySelector(".btn--trigger");
+          if (t) t.setAttribute("aria-expanded", "false");
+        });
+      });
 
       function esc(s) {
         if (s == null || s === "") return "—";
@@ -299,20 +392,20 @@
           const stairsPickup = b.stairsPickup === "yes" ? "Yes" : "No";
           const stairsDropoff = b.stairsDropoff === "yes" ? "Yes" : "No";
           title.textContent = "Booking " + (b.bookingRef || "");
-          const notes = (b.notes || "").trim();
+          const customerNote = (b.customerNote ?? b.notes ?? "").trim();
           content.innerHTML =
             '<div class="modal__section"><div class="modal__label">Customer name</div><div class="modal__value">' + esc(b.customerName || b.name) + "</div></div>" +
             '<div class="modal__section"><div class="modal__label">Customer phone</div><div class="modal__value">' + esc(b.customerPhone || b.phone) + "</div></div>" +
             '<div class="modal__section"><div class="modal__label">Customer email</div><div class="modal__value">' + esc(b.customerEmail || b.email) + "</div></div>" +
-            (notes ? '<div class="modal__section"><div class="modal__label">Customer note</div><div class="modal__value">' + esc(notes) + "</div></div>" : "") +
+            '<div class="modal__section"><div class="modal__label">Customer note</div><div class="modal__value">' + esc(customerNote || "—") + "</div></div>" +
             '<div class="modal__section"><div class="modal__label">Pickup address</div><div class="modal__value">' + esc(b.pickupAddress || b.pickup) + "</div></div>" +
             '<div class="modal__section"><div class="modal__label">Dropoff address</div><div class="modal__value">' + esc(b.dropoffAddress || b.dropoff) + "</div></div>" +
             '<div class="modal__section"><div class="modal__label">Items</div><div class="modal__value">' + esc(renderItems(b)) + "</div></div>" +
             '<div class="modal__section"><div class="modal__label">Helpers</div><div class="modal__value">' + (b.helpers ?? b.helper ?? "0") + "</div></div>" +
             '<div class="modal__section"><div class="modal__label">Stairs (pickup / dropoff)</div><div class="modal__value">' + stairsPickup + " / " + stairsDropoff + "</div></div>" +
             '<div class="modal__section"><div class="modal__label">Distance</div><div class="modal__value">' + distanceMiles + "</div></div>" +
-            '<div class="modal__section"><div class="modal__label">Deposit paid</div><div class="modal__value">' + fmt(b.deposit) + "</div></div>" +
-            '<div class="modal__section"><div class="modal__label">Remaining balance</div><div class="modal__value">' + fmt(b.remainingBalance) + "</div></div>";
+            '<div class="modal__section"><div class="modal__label">Deposit/Profit</div><div class="modal__value">' + fmt(b.deposit) + "</div></div>" +
+            '<div class="modal__section"><div class="modal__label">Driver payout/Remaining</div><div class="modal__value">' + fmt(b.driverPayout) + "</div></div>";
         } catch (e) {
           content.innerHTML = '<div class="error">Failed to load booking</div>';
         }
@@ -355,7 +448,7 @@
         const stairs = stairsPickup + " / " + stairsDropoff;
         const customerPrice = Number.isFinite(Number(b.customerPrice)) ? "£" + Number(b.customerPrice).toFixed(0) : "—";
         const driverPayout = Number.isFinite(Number(b.driverPayout)) ? "£" + Number(b.driverPayout).toFixed(0) : "—";
-        const notes = (b.notes || "").trim();
+        const customerNote = (b.customerNote ?? b.notes ?? "").trim();
         return (
           "----------------------------------------\n" +
           "🚚 NEW DELIVERY JOB\n\n" +
@@ -365,7 +458,7 @@
           "Items: " + itemsSummary + "\n\n" +
           "Helpers: " + helpers + "\n" +
           "Stairs: " + stairs + "\n\n" +
-          (notes ? "Customer note: " + notes + "\n\n" : "") +
+          (customerNote ? "Customer note: " + customerNote + "\n\n" : "") +
           "Customer price: " + customerPrice + "\n" +
           "Driver payout: " + driverPayout + "\n\n" +
           "Reply: ACCEPT " + bookingId + "\n" +
@@ -453,26 +546,25 @@
 
         const tableEl = document.getElementById("reportTable");
         if (!filtered.length) {
-          tableEl.innerHTML = '<tbody><tr><td colspan="8" class="empty">No bookings in date range</td></tr></tbody>';
+          tableEl.innerHTML = '<tbody><tr><td colspan="6" class="empty">No bookings in date range</td></tr></tbody>';
           return;
         }
         tableEl.innerHTML =
-          "<thead><tr><th>Booking ref</th><th>Date</th><th>Customer price</th><th>Platform profit</th><th>Driver payout</th><th>Deposit</th><th>Remaining</th><th>Status</th></tr></thead>" +
+          "<thead><tr><th>Booking ref</th><th>Date</th><th>Customer price</th><th>Deposit/Profit</th><th>Driver payout/Remaining</th><th>Job status</th></tr></thead>" +
           "<tbody>" +
           filtered.map((b) => {
             const ref = b.bookingRef || "";
             const dateStr = formatDate(b.date || b.createdAt);
-            const statusHtml = statusBadge(b.status);
+            const jobStatus = b.jobStatus || "pending";
+            const jobStatusHtml = jobStatusBadge(jobStatus);
             return (
               "<tr>" +
               "<td>" + ref + "</td>" +
               "<td>" + dateStr + "</td>" +
               "<td>" + fmt(b.customerPrice) + "</td>" +
-              "<td>" + fmt(b.platformProfit) + "</td>" +
-              "<td>" + fmt(b.driverPayout) + "</td>" +
               "<td>" + fmt(b.deposit) + "</td>" +
-              "<td>" + fmt(b.remainingBalance ?? b.remaining) + "</td>" +
-              "<td>" + statusHtml + "</td>" +
+              "<td>" + fmt(b.driverPayout) + "</td>" +
+              "<td>" + jobStatusHtml + "</td>" +
               "</tr>"
             );
           }).join("") +
@@ -487,7 +579,7 @@
           showToast("Run report first to export.");
           return;
         }
-        const headers = ["Booking ref", "Date", "Customer price", "Platform profit", "Driver payout", "Deposit", "Remaining", "Status"];
+        const headers = ["Booking ref", "Date", "Customer price", "Deposit/Profit", "Driver payout/Remaining", "Job status"];
         const csvRows = [headers.join(",")];
         function csvEsc(s) {
           const t = String(s == null ? "" : s);
@@ -497,12 +589,10 @@
           const id = csvEsc(b.bookingRef || "");
           const dateStr = csvEsc(b.date || b.createdAt);
           const cust = Number(b.customerPrice) || 0;
-          const plat = Number(b.platformProfit) || 0;
-          const drv = Number(b.driverPayout) || 0;
           const dep = Number(b.deposit) || 0;
-          const rem = Number(b.remainingBalance ?? b.remaining) || 0;
-          const status = csvEsc(b.status);
-          csvRows.push([id, dateStr, cust, plat, drv, dep, rem, status].join(","));
+          const drv = Number(b.driverPayout) || 0;
+          const jobStatus = csvEsc(b.jobStatus || "pending");
+          csvRows.push([id, dateStr, cust, dep, drv, jobStatus].join(","));
         });
         const csv = csvRows.join("\n");
         const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });

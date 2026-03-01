@@ -49,7 +49,7 @@ async function handleCheckoutSessionCompleted(session, booking) {
     booking.pickupAddress || booking.pickupFullAddress || booking.pickup || "—";
   const dropoff =
     booking.dropoffAddress || booking.dropoffFullAddress || booking.dropoff || "—";
-  const notes = (booking.notes || "").trim();
+  const notes = (booking.customerNote ?? booking.notes ?? "").trim();
   const totalPrice = formatPrice(booking.customerPrice ?? booking.total ?? 0);
   const depositPaid = formatPrice(booking.deposit ?? 0);
   const remainingBalance = formatPrice(
