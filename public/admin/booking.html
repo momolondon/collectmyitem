@@ -30,6 +30,8 @@
     .btn--primary:disabled { opacity: 0.5; cursor: not-allowed; }
     .btn--ghost { background: transparent; color: #94a3b8; }
     .btn--ghost:hover { color: #fff; }
+    .btn--danger { background: #dc2626; color: #fff; }
+    .btn--danger:hover { background: #b91c1c; }
     .badge { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 0.8rem; }
     .badge--paid { background: #065f46; color: #6ee7b7; }
     .badge--unpaid { background: #7f1d1d; color: #fca5a5; }
@@ -122,7 +124,7 @@
           return;
         }
         try {
-          const res = await fetch("/api/admin/booking/" + encodeURIComponent(id));
+          const res = await fetch("/api/admin/booking/" + encodeURIComponent(id), { credentials: "include" });
           if (!res.ok) {
             content.innerHTML = '<div class="error">Booking not found</div>';
             return;
@@ -189,6 +191,7 @@
             '<input type="checkbox" id="driverPaidCb" class="driver-paid-cb" data-id="' + esc(id) + '"' + (b.driverPaid ? ' checked' : '') + (b.jobStatus !== "done" ? ' disabled' : '') + ' title="Driver paid" aria-label="Driver paid">' +
             (b.driverPaid && b.driverPaidAt ? ' <span style="margin-left: 8px; color: #94a3b8; font-size: 0.9rem;">' + formatDate(b.driverPaidAt) + "</span>" : "") +
             "</div></div>" +
+            '<p style="margin-top: 20px;"><button id="deleteBookingBtn" class="btn btn--danger">Delete booking</button></p>' +
             "</div>";
 
           const markDoneBtn = document.getElementById("markDoneBtn");
@@ -196,8 +199,8 @@
             markDoneBtn.addEventListener("click", async () => {
               markDoneBtn.disabled = true;
               try {
-                const r = await fetch("/api/admin/booking/" + encodeURIComponent(id) + "/mark-done", { method: "POST" });
-                const data = await r.json();
+                const r = await fetch("/api/admin/booking/" + encodeURIComponent(id) + "/mark-done", { method: "POST", credentials: "include" });
+                const data = r.headers.get("content-type")?.includes("application/json") ? await r.json() : {};
                 if (r.ok) {
                   load();
                 } else {
@@ -216,8 +219,8 @@
               if (!this.checked) return;
               this.disabled = true;
               try {
-                const r = await fetch("/api/admin/booking/" + encodeURIComponent(id) + "/mark-driver-paid", { method: "POST" });
-                const data = await r.json();
+                const r = await fetch("/api/admin/booking/" + encodeURIComponent(id) + "/mark-driver-paid", { method: "POST", credentials: "include" });
+                const data = r.headers.get("content-type")?.includes("application/json") ? await r.json() : {};
                 if (r.ok) {
                   load();
                 } else {
@@ -229,6 +232,27 @@
                 alert("Network error");
                 this.checked = false;
                 this.disabled = false;
+              }
+            });
+          }
+
+          const deleteBookingBtn = document.getElementById("deleteBookingBtn");
+          if (deleteBookingBtn) {
+            deleteBookingBtn.addEventListener("click", async () => {
+              if (!confirm("Delete this booking? This cannot be undone.")) return;
+              deleteBookingBtn.disabled = true;
+              try {
+                const r = await fetch("/api/admin/booking/" + encodeURIComponent(id), { method: "DELETE", credentials: "include" });
+                const data = r.headers.get("content-type")?.includes("application/json") ? await r.json() : {};
+                if (r.ok) {
+                  window.location.href = "/admin";
+                } else {
+                  alert(data.error || "Failed to delete");
+                  deleteBookingBtn.disabled = false;
+                }
+              } catch (e) {
+                alert("Network error");
+                deleteBookingBtn.disabled = false;
               }
             });
           }

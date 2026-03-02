@@ -71,6 +71,12 @@
     .report-controls input[type="date"] { padding: 8px 12px; border-radius: 8px; border: 1px solid #334155; background: #0f172a; color: #e2e8f0; font-size: 0.9rem; }
     .btn--success { background: #059669; color: #fff; }
     .btn--success:hover { background: #047857; }
+    .btn--danger { background: #dc2626; color: #fff; }
+    .btn--danger:hover { background: #b91c1c; }
+    .search-bar { margin-bottom: 20px; }
+    .search-bar input { width: 100%; max-width: 320px; padding: 10px 14px; border-radius: 8px; border: 1px solid #334155; background: #0f172a; color: #e2e8f0; font-size: 0.95rem; }
+    .search-bar input::placeholder { color: #64748b; }
+    .search-bar input:focus { outline: none; border-color: #3b82f6; }
     .report-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 20px; }
     .report-summary .kpi { margin: 0; }
     .modal__inner--wide { max-width: 900px; }
@@ -118,6 +124,9 @@
         <div class="kpi__label">Driver payouts owed</div>
         <div class="kpi__value" id="driverPayoutsOwed">—</div>
       </div>
+    </div>
+    <div class="search-bar">
+      <input type="text" id="searchBooking" placeholder="Search by booking number…" aria-label="Search by booking number">
     </div>
     <div class="table-wrap">
       <table>
@@ -207,7 +216,7 @@
       }
 
       async function load() {
-        const res = await fetch("/api/admin/bookings");
+        const res = await fetch("/api/admin/bookings", { credentials: "include" });
         const bookings = await res.json(); // Server returns only paid/paid_deposit with bookingRef
         window.bookings = bookings;
         const totalRevenue = bookings.reduce((s, b) => s + (Number(b.customerPrice) || 0), 0);
@@ -241,14 +250,15 @@
               : '<button type="button" class="btn btn--action btn--primary" data-id="' + b.bookingRef + '" data-action="mark-done">✅ Mark done</button>';
             const viewBtn = '<button type="button" class="btn btn--action btn--ghost" data-id="' + b.bookingRef + '" data-action="view">👁 View</button>';
             const whatsappBtn = '<button type="button" class="btn btn--action btn--whatsapp" data-id="' + b.bookingRef + '" data-action="whatsapp" title="Copy to WhatsApp">💬 WhatsApp</button>';
+            const deleteBtn = '<button type="button" class="btn btn--action btn--danger" data-id="' + b.bookingRef + '" data-action="delete" title="Delete booking">🗑 Delete</button>';
             const actionsHtml =
               '<div class="actions-stack">' +
-              viewBtn + whatsappBtn + markDoneBtn +
+              viewBtn + whatsappBtn + markDoneBtn + deleteBtn +
               '</div>' +
               '<div class="actions-dropdown">' +
               '<button type="button" class="btn btn--trigger btn--ghost" aria-haspopup="true" aria-expanded="false">Actions ▾</button>' +
               '<div class="actions-menu">' +
-              viewBtn + whatsappBtn + markDoneBtn +
+              viewBtn + whatsappBtn + markDoneBtn + deleteBtn +
               '</div></div>';
             const phone = (b.customerPhone || b.phone || "").trim();
             return (
@@ -277,7 +287,7 @@
             btn.closest(".actions-dropdown")?.classList.remove("open");
             btn.disabled = true;
             try {
-              const r = await fetch("/api/admin/booking/" + encodeURIComponent(bookingRef) + "/mark-done", { method: "POST" });
+              const r = await fetch("/api/admin/booking/" + encodeURIComponent(bookingRef) + "/mark-done", { method: "POST", credentials: "include" });
               let data;
               try {
                 data = await r.json();
@@ -307,7 +317,7 @@
             if (!bookingRef) return;
             this.disabled = true;
             try {
-              const r = await fetch("/api/admin/booking/" + encodeURIComponent(bookingRef) + "/mark-driver-paid", { method: "POST" });
+              const r = await fetch("/api/admin/booking/" + encodeURIComponent(bookingRef) + "/mark-driver-paid", { method: "POST", credentials: "include" });
               const data = await r.json();
               if (r.ok) {
                 load();
@@ -333,6 +343,31 @@
           });
         });
 
+        tbody.querySelectorAll("[data-action=delete]").forEach((btn) => {
+          btn.addEventListener("click", async () => {
+            const bookingRef = btn.getAttribute("data-id");
+            if (!bookingRef) return;
+            btn.closest(".actions-dropdown")?.classList.remove("open");
+            if (!confirm("Delete booking " + bookingRef + "? This cannot be undone.")) return;
+            btn.disabled = true;
+            try {
+              const r = await fetch("/api/admin/booking/" + encodeURIComponent(bookingRef), { method: "DELETE", credentials: "include" });
+              const data = r.headers.get("content-type")?.includes("application/json") ? await r.json() : {};
+              if (r.ok) {
+                load();
+              } else {
+                alert(data.error || "Failed to delete");
+                btn.disabled = false;
+              }
+            } catch (e) {
+              alert("Network error");
+              btn.disabled = false;
+            }
+          });
+        });
+
+        applySearchFilter();
+
         tbody.querySelectorAll(".actions-dropdown .btn--trigger").forEach((trigger) => {
           trigger.addEventListener("click", (e) => {
             e.stopPropagation();
@@ -348,6 +383,18 @@
           });
         });
       }
+
+      function applySearchFilter() {
+        const q = (document.getElementById("searchBooking").value || "").trim().toLowerCase();
+        tbody.querySelectorAll("tr").forEach((tr) => {
+          if (tr.querySelector("td.empty")) return;
+          const refCell = tr.querySelector("td.col-ref");
+          const ref = (refCell ? refCell.textContent : "").trim().toLowerCase();
+          tr.style.display = q === "" || ref.includes(q) ? "" : "none";
+        });
+      }
+
+      document.getElementById("searchBooking").addEventListener("input", applySearchFilter);
 
       document.addEventListener("click", () => {
         tbody.querySelectorAll(".actions-dropdown.open").forEach((wrap) => {
@@ -385,7 +432,7 @@
         content.innerHTML = '<div class="empty">Loading…</div>';
         modal.classList.add("open");
         try {
-          const r = await fetch("/api/admin/booking/" + encodeURIComponent(bookingRef));
+          const r = await fetch("/api/admin/booking/" + encodeURIComponent(bookingRef), { credentials: "include" });
           if (!r.ok) throw new Error("Not found");
           const b = await r.json();
           const distanceMiles = b.miles != null ? Number(b.miles).toFixed(1) + " miles" : "—";

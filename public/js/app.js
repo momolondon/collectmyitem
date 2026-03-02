@@ -940,6 +940,7 @@ bookingForm?.addEventListener("submit", async (e) => {
 
   const fd = new FormData(bookingForm);
 
+  const noteVal = (fd.get("notes") || fd.get("note") || "").toString().trim();
   const booking = {
     ...lastQuote.payload,
     quotedTotal: lastQuote.result.total,
@@ -948,7 +949,8 @@ bookingForm?.addEventListener("submit", async (e) => {
     name: fd.get("name"),
     phone: fd.get("phone"),
     email: fd.get("email") || "",
-    notes: fd.get("notes") || "",
+    note: noteVal,
+    notes: noteVal,
   };
 
   const submitBtn = bookingForm.querySelector('button[type="submit"]');
