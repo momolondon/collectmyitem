@@ -65,6 +65,19 @@
     if (el.errorMessage) el.errorMessage.textContent = message || "Something went wrong.";
   }
 
+  function parseJsonResponse(res) {
+    return res.text().then(function (text) {
+      try {
+        return { ok: res.ok, body: text ? JSON.parse(text) : {} };
+      } catch (e) {
+        if (typeof text === "string" && text.trim().indexOf("<") === 0) {
+          throw new Error("The server returned a web page instead of data. Pricing and maps need the backend (Node or PHP) to be running.");
+        }
+        throw e;
+      }
+    });
+  }
+
   function updateContinueButton() {
     if (el.continueBtn) {
       el.continueBtn.disabled = !lastQuoteResult;
@@ -104,20 +117,6 @@
     state[which] = { formattedAddress, postcode: postcode || "", lat, lng, placeId };
     fillHiddenFields(which, state[which]);
     showError(which, "");
-  }
-
-  function geocodePostcode(postcode, apiKey) {
-    const formatted = formatPostcodeForDisplay(postcode) + ", UK";
-    const url = "https://maps.googleapis.com/maps/api/geocode/json?address=" +
-      encodeURIComponent(formatted) + "&region=gb&key=" + encodeURIComponent(apiKey);
-    return fetch(url)
-      .then(function (res) { return res.json(); })
-      .then(function (data) {
-        const result = data.results && data.results[0];
-        if (!result || !result.geometry || !result.geometry.location) return null;
-        return { lat: result.geometry.location.lat, lng: result.geometry.location.lng };
-      })
-      .catch(function () { return null; });
   }
 
   function geocodeAddress(address, apikey) {
@@ -325,7 +324,7 @@
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       })
-        .then(function (res) { return res.json().then(function (body) { return { ok: res.ok, body }; }); })
+        .then(function (res) { return parseJsonResponse(res).then(function (p) { return { ok: p.ok, body: p.body }; }); })
         .then(function (_ref) {
           setLoading(false);
           if (_ref.ok) {
@@ -366,15 +365,19 @@
   }
 
   fetch("/api/maps-config")
-    .then(function (res) { return res.json(); })
-    .then(function (data) {
-      if (data.apiKey) {
+    .then(function (res) { return parseJsonResponse(res).then(function (p) { return { ok: p.ok, data: p.body }; }); })
+    .then(function (_ref) {
+      var ok = _ref.ok;
+      var data = _ref.data;
+      if (ok && data && data.apiKey) {
         window.__quoteApiKey = data.apiKey;
         loadMapsAndInit(data.apiKey);
+      } else {
+        setApiError((data && data.error) || "Could not load map settings. Check that the server is running and GOOGLE_MAPS_API_KEY is set.");
       }
     })
-    .catch(function () {
-      setApiError("Could not load map settings. Check that the server is running and GOOGLE_MAPS_API_KEY is set.");
+    .catch(function (err) {
+      setApiError(err.message || "Could not load map settings. Check that the server is running and GOOGLE_MAPS_API_KEY is set.");
     });
 })();
 

@@ -81,6 +81,19 @@
     el.errorMessage.textContent = message || "Something went wrong.";
   }
 
+  function parseJsonResponse(res) {
+    return res.text().then(function (text) {
+      try {
+        return { ok: res.ok, body: text ? JSON.parse(text) : {} };
+      } catch (e) {
+        if (typeof text === "string" && text.trim().indexOf("<") === 0) {
+          throw new Error("The server returned a web page instead of data. Pricing and maps need the backend (Node or PHP) to be running.");
+        }
+        throw e;
+      }
+    });
+  }
+
   /** Fill hidden inputs for a location from state/geocode result */
   function fillHiddenFields(which, data) {
     const latEl = which === PICKUP ? el.pickupLat : el.dropoffLat;
@@ -361,8 +374,8 @@
         body: JSON.stringify(payload),
       })
         .then(function (res) {
-          return res.json().then(function (body) {
-            return { ok: res.ok, status: res.status, body };
+          return parseJsonResponse(res).then(function (p) {
+            return { ok: res.ok, status: res.status, body: p.body };
           });
         })
         .then(function (_ref) {
@@ -389,15 +402,15 @@
 
   // Fetch Maps API key and init
   fetch("/api/maps-config")
-    .then(function (res) { return res.json(); })
+    .then(function (res) { return parseJsonResponse(res).then(function (p) { return p.body; }); })
     .then(function (data) {
-      if (data.apiKey) {
+      if (data && data.apiKey) {
         window.__newFormApiKey = data.apiKey;
         loadMapsAndInit(data.apiKey);
       }
     })
-    .catch(function () {
-      setApiError("Could not load map settings. Check that the server is running and GOOGLE_MAPS_API_KEY is set.");
+    .catch(function (err) {
+      setApiError(err.message || "Could not load map settings. Check that the server is running and GOOGLE_MAPS_API_KEY is set.");
     });
 })();
 (() => {

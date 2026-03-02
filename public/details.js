@@ -45,6 +45,19 @@
     if (el.errorMessage) el.errorMessage.textContent = msg || "";
   }
 
+  function parseJsonResponse(res) {
+    return res.text().then(function (text) {
+      try {
+        return { ok: res.ok, body: text ? JSON.parse(text) : {} };
+      } catch (e) {
+        if (typeof text === "string" && text.trim().indexOf("<") === 0) {
+          throw new Error("The server returned a web page instead of data. Checkout needs the backend (Node or PHP) to be running.");
+        }
+        throw e;
+      }
+    });
+  }
+
   function clearError() {
     if (el.errorSection) el.errorSection.hidden = true;
     if (el.errorMessage) el.errorMessage.textContent = "";
@@ -120,6 +133,7 @@
       return;
     }
 
+    const noteValue = (el.notes?.value || "").trim();
     const payload = {
       ...quote.payload,
       quotedTotal: quote.result.total,
@@ -128,7 +142,8 @@
       customerName: (el.customerName?.value || "").trim(),
       customerPhone: (el.customerPhone?.value || "").trim(),
       customerEmail: (el.customerEmail?.value || "").trim(),
-      notes: (el.notes?.value || "").trim(),
+      note: noteValue,
+      notes: noteValue,
       // Backward compat for server
       name: (el.customerName?.value || "").trim(),
       phone: (el.customerPhone?.value || "").trim(),
@@ -145,7 +160,7 @@
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     })
-      .then(function (res) { return res.json().then(function (body) { return { ok: res.ok, body }; }); })
+      .then(function (res) { return parseJsonResponse(res).then(function (p) { return { ok: p.ok, body: p.body }; }); })
       .then(function (out) {
         if (out.ok && out.body?.url) {
           window.location.href = out.body.url;
