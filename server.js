@@ -180,12 +180,12 @@ function basicAuth(req, res, next) {
   const expectedPass = (process.env.ADMIN_PASSWORD || "").trim();
   if (!expectedUser || !expectedPass) {
     console.warn("⚠️ ADMIN_USERNAME and ADMIN_PASSWORD must be set for admin protection.");
-    return res.status(401).setHeader("WWW-Authenticate", 'Basic realm="Admin"').send("Unauthorized");
+    return res.status(401).setHeader("WWW-Authenticate", 'Basic realm="Admin"').setHeader("Content-Type", "application/json").json({ error: "Unauthorized" });
   }
 
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith("Basic ")) {
-    return res.status(401).setHeader("WWW-Authenticate", 'Basic realm="Admin"').send("Unauthorized");
+    return res.status(401).setHeader("WWW-Authenticate", 'Basic realm="Admin"').setHeader("Content-Type", "application/json").json({ error: "Unauthorized" });
   }
 
   let decoded;
@@ -200,7 +200,7 @@ function basicAuth(req, res, next) {
   const password = (colonIndex >= 0 ? decoded.slice(colonIndex + 1) : "").trim();
 
   if (username !== expectedUser || password !== expectedPass) {
-    return res.status(401).setHeader("WWW-Authenticate", 'Basic realm="Admin"').send("Unauthorized");
+    return res.status(401).setHeader("WWW-Authenticate", 'Basic realm="Admin"').setHeader("Content-Type", "application/json").json({ error: "Unauthorized" });
   }
 
   next();
@@ -1059,10 +1059,27 @@ app.get("/api/admin/bookings", (req, res) => {
   res.json(bookings);
 });
 
+// Find booking index by id or bookingRef (handles trim + optional decode)
+function findBookingIndexByRef(bookings, ref) {
+  const raw = (ref || "").trim();
+  const decoded = (() => { try { return decodeURIComponent(raw); } catch (_) { return raw; } })();
+  for (const r of [raw, decoded]) {
+    if (!r) continue;
+    const idx = bookings.findIndex(
+      (b) =>
+        (b.bookingRef && (b.bookingRef === r || String(b.bookingRef).trim() === r)) ||
+        (b.id && String(b.id).trim() === r)
+    );
+    if (idx !== -1) return idx;
+  }
+  return -1;
+}
+
 app.get("/api/admin/booking/:id", (req, res) => {
-  const ref = req.params.id; // id param is actually bookingRef
+  const ref = req.params.id;
   const bookings = readBookings();
-  const booking = bookings.find((b) => b.bookingRef === ref);
+  const idx = findBookingIndexByRef(bookings, ref);
+  const booking = idx !== -1 ? bookings[idx] : null;
   if (!booking || !booking.bookingRef) {
     return res.status(404).json({ error: "Booking not found" });
   }
@@ -1077,7 +1094,7 @@ app.get("/api/admin/booking/:id", (req, res) => {
 app.post("/api/admin/booking/:id/mark-done", (req, res) => {
   const ref = req.params.id;
   const bookings = readBookings();
-  let idx = bookings.findIndex((b) => b.bookingRef === ref || (b.id && String(b.id) === ref));
+  const idx = findBookingIndexByRef(bookings, ref);
   if (idx === -1) {
     return res.status(404).json({ error: "Booking not found" });
   }
@@ -1097,7 +1114,7 @@ app.post("/api/admin/booking/:id/mark-done", (req, res) => {
 app.post("/api/admin/booking/:id/mark-driver-paid", (req, res) => {
   const ref = req.params.id;
   const bookings = readBookings();
-  const idx = bookings.findIndex((b) => b.bookingRef === ref);
+  const idx = findBookingIndexByRef(bookings, ref);
   if (idx === -1) {
     return res.status(404).json({ error: "Booking not found" });
   }
@@ -1108,6 +1125,23 @@ app.post("/api/admin/booking/:id/mark-driver-paid", (req, res) => {
   booking.updatedAt = now;
   writeBookings(bookings);
   res.json({ ok: true, booking: normalizeBookingForAdmin(booking) });
+});
+
+app.delete("/api/admin/booking/:id", (req, res) => {
+  const ref = req.params.id;
+  const bookings = readBookings();
+  const idx = findBookingIndexByRef(bookings, ref);
+  if (idx === -1) {
+    return res.status(404).json({ error: "Booking not found. Check that the booking ref is correct." });
+  }
+  bookings.splice(idx, 1);
+  try {
+    writeBookings(bookings);
+  } catch (err) {
+    console.error("[delete booking] writeBookings failed:", err.message);
+    return res.status(500).json({ error: "Failed to delete booking: " + err.message });
+  }
+  res.json({ ok: true });
 });
 
 // ------------------------------
