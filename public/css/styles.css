@@ -94,7 +94,8 @@ img {
   margin-top: 0;
   margin-bottom: 0;
 }
-.header__inner {
+.header__inner,
+.header__bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -545,22 +546,12 @@ label{
   .steps { grid-template-columns: 1fr; }
   .form__row { grid-template-columns: 1fr; }
   .ctaStrip { flex-direction: column; align-items: flex-start; }
-  /* Compact header — height: auto so content can wrap */
-  .header { height: auto; padding: 10px 14px; flex-wrap: wrap; }
-  .header__inner { flex-direction: row; }
-  .brand__logo { height: 44px; max-height: 44px; max-width: 180px; }
-  .nav { width: 100%; justify-content: flex-end; flex-wrap: wrap; gap: 8px; }
 }
 
 /* Mobile (480px and below) */
 @media (max-width: 480px) {
   .container { width: min(100%, calc(100% - 24px)); padding: 0 12px; }
   .trust { grid-template-columns: 1fr; }
-  .header { padding: 8px 12px; }
-  .header__inner { flex-direction: row; flex-wrap: wrap; align-items: center; }
-  .nav { width: 100%; justify-content: space-between; flex-wrap: wrap; }
-  .nav a { padding: 8px 10px; font-size: 14px; min-height: 44px; display: flex; align-items: center; white-space: normal; }
-  .brand__logo { height: 38px; max-height: 38px; max-width: 160px; }
 }
 
 /* Very small phones (360px and below) */
@@ -653,69 +644,65 @@ label{
   to{ opacity:0; transform: translateY(6px); }
 }
 
-/* ===== Mobile header (≤768px): logo + 2-col nav grid ===== */
+/* ===== Desktop: keep existing layout (no change) ===== */
+.header__bar { display: flex; align-items: center; justify-content: space-between; }
+
+/* ===== Mobile header (≤768px): compact logo + 2x2 quick actions ===== */
 @media (max-width: 768px) {
-  /* Header container */
+  /* Compact header bar (logo only) */
   header, .header, .header--premium {
     height: auto !important;
-    padding: 10px 12px !important;
+    padding: 8px 0 !important;
   }
 
-  /* Make header content stack */
-  header .container,
-  .header .container,
-  .header--premium .container {
-    display: flex !important;
-    flex-direction: column !important;
-    align-items: flex-start !important;
-    gap: 10px !important;
+  .header__bar {
+    padding: 8px 12px !important;
   }
 
-  /* Brand/logo row */
-  .brand {
-    display: flex !important;
-    align-items: center !important;
-    width: 100% !important;
-  }
-
-  /* Logo sizing (mobile) */
   .brand__logo {
-    height: 44px !important;
+    height: 42px !important;
     width: auto !important;
     object-fit: contain !important;
     display: block !important;
   }
 
-  /* Nav becomes a 2-column grid */
-  nav, .nav, .nav--premium {
+  /* Mobile actions area UNDER the header (stacked when header__bar wraps) */
+  .mobile-actions {
+    padding: 8px 12px 12px !important;
+  }
+
+  .mobile-actions .nav,
+  .mobile-actions nav {
     width: 100% !important;
     display: grid !important;
     grid-template-columns: 1fr 1fr !important;
     gap: 10px !important;
-    justify-items: stretch !important;
-    align-items: center !important;
+  }
+
+  .mobile-actions .nav a,
+  .mobile-actions nav a,
+  .mobile-actions .nav button,
+  .mobile-actions nav button {
+    width: 100% !important;
+    text-align: center !important;
+    padding: 10px 12px !important;
+    font-size: 14px !important;
+    white-space: nowrap !important;
+  }
+
+  /* Header bar stacks: logo row first, then mobile-actions */
+  .header__bar {
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+
+  .header__bar .brand {
+    width: auto !important;
   }
 
   /* Hide divider in grid layout */
-  nav .nav__divider, .nav .nav__divider {
+  .mobile-actions .nav__divider {
     display: none !important;
-  }
-
-  /* Make each nav link/button fill its grid cell */
-  nav a, nav button,
-  .nav a, .nav button,
-  .nav--premium a, .nav--premium button {
-    width: 100% !important;
-    text-align: center !important;
-    white-space: nowrap !important;
-    padding: 10px 12px !important;
-    font-size: 14px !important;
-  }
-
-  /* If "How it works" is longer, allow it to wrap nicely */
-  nav a:first-child {
-    white-space: normal !important;
-    line-height: 1.1 !important;
   }
 }
 
