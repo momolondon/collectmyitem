@@ -461,7 +461,7 @@ async function calculateDistanceMiles(
   pickupCoords,
   dropoffCoords
 ) {
-  const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+  const apiKey = process.env.GOOGLE_MAPS_SERVER_KEY;
   if (!apiKey) {
     // No key configured – fall back to minimum-distance pricing only
     return 0;
@@ -639,7 +639,7 @@ function isInLondonZones(lat, lng) {
 }
 
 async function distanceMatrixMiles(originLat, originLng, destLat, destLng) {
-  const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+  const apiKey = process.env.GOOGLE_MAPS_SERVER_KEY;
   if (!apiKey) return 0;
   const origin = `${originLat},${originLng}`;
   const dest = `${destLat},${destLng}`;
@@ -1016,7 +1016,7 @@ app.post("/api/create-checkout-session", handleCheckout);
 // ------------------------------
 
 app.get("/api/maps-config", (req, res) => {
-  const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+  const apiKey = process.env.GOOGLE_MAPS_SERVER_KEY;
   if (!apiKey) {
     return res
       .status(500)
@@ -1149,8 +1149,8 @@ app.delete("/api/admin/booking/:id", (req, res) => {
 // ------------------------------
 
 // Optional: warn if Google Maps key is missing (needed for new-form and distance)
-if (!process.env.GOOGLE_MAPS_API_KEY) {
-  console.warn("⚠️  GOOGLE_MAPS_API_KEY is not set. New pricing form and distance calculation will be limited.");
+if (!process.env.GOOGLE_MAPS_SERVER_KEY) {
+  console.warn("⚠️  GOOGLE_MAPS_SERVER_KEY is not set. New pricing form and distance calculation will be limited.");
 }
 
 app.listen(PORT, () => {
