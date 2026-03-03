@@ -32,7 +32,7 @@ const MIN_TOTAL = 60; // Never allow total below £60
 
 // Bulky items: sofa, corner sofa, armchair, dining table, bed frame, mattress, wardrobe,
 // chest of drawers, desk, tv stand, fridge, freezer, washing machine, tumble dryer,
-// dishwasher, oven, TV
+// dishwasher, oven, TV, plus any custom items from the quote form
 const BULKY_ITEM_TERMS = [
   "corner sofa", "sofa", "armchair", "dining table", "bed frame", "mattress", "wardrobe",
   "chest of drawers", "desk", "tv stand", "fridge", "freezer", "washing machine",
@@ -45,14 +45,18 @@ function countBulkyUnits(items) {
   for (const item of items) {
     const name = String(item?.name || "").toLowerCase();
     const qty = Math.max(0, parseInt(item?.qty, 10) || 1);
-    const isBulky = BULKY_ITEM_TERMS.some((term) => name.includes(term));
+    const isCustom = item && item.isCustom === true;
+    const isBulkyByName = BULKY_ITEM_TERMS.some((term) => name.includes(term));
+    const isBulky = isCustom || isBulkyByName;
     if (isBulky) units += qty;
   }
   return units;
 }
 
 function calcBulkyCharge(bulkyUnits) {
-  return bulkyUnits <= 2 ? 0 : Math.ceil((bulkyUnits - 2) / 2) * BULKY_BAND_FEE;
+  if (bulkyUnits <= 2) return 0;
+  const extraUnits = bulkyUnits - 2;
+  return extraUnits * BULKY_BAND_FEE;
 }
 
 // Box charge: first 5 free, then £5 per extra box
@@ -440,6 +444,36 @@ function formatPostcodeForGoogle(pc) {
   return cleaned + ", UK";
 }
 
+/**
+ * Reverse geocode lat/lng to get UK postcode via Google Geocoding API.
+ * Returns postcode string or "" if not found / API unavailable.
+ */
+async function reverseGeocodeToPostcode(lat, lng) {
+  const apiKey = process.env.GOOGLE_MAPS_SERVER_KEY;
+  if (!apiKey || lat == null || lng == null || !Number.isFinite(lat) || !Number.isFinite(lng)) {
+    return "";
+  }
+  const latlng = `${Number(lat)},${Number(lng)}`;
+  const params = new URLSearchParams({ latlng, key: apiKey });
+  const url = `https://maps.googleapis.com/maps/api/geocode/json?${params.toString()}`;
+  try {
+    const resp = await fetch(url);
+    if (!resp.ok) return "";
+    const data = await resp.json();
+    const result = data?.results?.[0];
+    if (!result || !result.address_components) return "";
+    const components = result.address_components;
+    for (let i = 0; i < components.length; i++) {
+      const types = components[i].types || [];
+      if (types.indexOf("postal_code") !== -1) {
+        const pc = (components[i].long_name || "").trim();
+        return pc ? cleanPostcode(pc) : "";
+      }
+    }
+  } catch (_) {}
+  return "";
+}
+
 function toDistanceLocation(postcode, coords) {
   const hasCoords =
     coords &&
@@ -697,10 +731,17 @@ async function calculatePricingNew(body) {
 
   const distanceCharge = PER_MILE_RATE * miles;
 
-  const pickupPostcode = pickup.postcode ? cleanPostcode(pickup.postcode) : "";
-  const dropoffPostcode = dropoff.postcode ? cleanPostcode(dropoff.postcode) : "";
+  // Resolve postcodes: use provided or derive from lat/lng (so congestion applies whenever we have a location)
+  let pickupPostcode = pickup.postcode ? cleanPostcode(pickup.postcode) : "";
+  let dropoffPostcode = dropoff.postcode ? cleanPostcode(dropoff.postcode) : "";
+  if (!pickupPostcode && Number.isFinite(lat1) && Number.isFinite(lng1)) {
+    pickupPostcode = await reverseGeocodeToPostcode(lat1, lng1);
+  }
+  if (!dropoffPostcode && Number.isFinite(lat2) && Number.isFinite(lng2)) {
+    dropoffPostcode = await reverseGeocodeToPostcode(lat2, lng2);
+  }
 
-  // Congestion: apply only if pickup OR dropoff inside congestion zone
+  // Congestion: apply when pickup OR dropoff is inside congestion zone (using postcode from payload or reverse-geocoded)
   const congestionApplied =
     (pickupPostcode && isCongestionZone(pickupPostcode)) ||
     (dropoffPostcode && isCongestionZone(dropoffPostcode));

@@ -119,14 +119,37 @@
     return "";
   }
 
-  /** When user selects an autocomplete suggestion */
+  /** Reverse geocode lat/lng to get postcode when address_components did not include it. */
+  function reverseGeocodeToPostcode(lat, lng, apiKey) {
+    if (!apiKey || lat == null || lng == null) return Promise.resolve("");
+    const latlng = encodeURIComponent(lat + "," + lng);
+    const url =
+      "https://maps.googleapis.com/maps/api/geocode/json?latlng=" + latlng +
+      "&region=gb&key=" + encodeURIComponent(apiKey);
+    return fetch(url)
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        const result = data.results && data.results[0];
+        if (!result || !result.address_components) return "";
+        const components = result.address_components;
+        for (let i = 0; i < components.length; i++) {
+          if ((components[i].types || []).indexOf("postal_code") !== -1) {
+            return (components[i].long_name || "").trim();
+          }
+        }
+        return "";
+      })
+      .catch(function () { return ""; });
+  }
+
+  /** When user selects an autocomplete suggestion: capture formatted_address, place_id, geometry; auto-fill postcode from address_components or reverse geocode. */
   function onPlaceSelected(which, place) {
     if (!place || !place.geometry || !place.geometry.location) return;
     const lat = place.geometry.location.lat();
     const lng = place.geometry.location.lng();
     const formattedAddress = place.formatted_address || "";
-    const postcode = getPostcodeFromPlace(place);
     const placeId = place.place_id || null;
+    let postcode = getPostcodeFromPlace(place);
     state[which] = {
       formattedAddress,
       postcode: postcode || "",
@@ -136,6 +159,17 @@
     };
     fillHiddenFields(which, state[which]);
     showError(which, "");
+    if (!postcode && lat != null && lng != null) {
+      const apiKey = window.__newFormApiKey;
+      if (apiKey) {
+        reverseGeocodeToPostcode(lat, lng, apiKey).then(function (pc) {
+          if (pc && state[which] && state[which].lat === lat && state[which].lng === lng) {
+            state[which].postcode = pc;
+            fillHiddenFields(which, state[which]);
+          }
+        });
+      }
+    }
   }
 
   /** Geocode a UK postcode string and return { lat, lng } or null */
@@ -339,6 +373,21 @@
   function onSubmit(e) {
     e.preventDefault();
     clearErrors();
+    const dateInput = el.form ? el.form.querySelector('[name="date"]') : null;
+    const dateValue = dateInput ? dateInput.value : "";
+    if (!dateValue) {
+      if (dateInput && typeof dateInput.focus === "function") {
+        dateInput.focus();
+      }
+      if (typeof window !== "undefined" && typeof window.alert === "function") {
+        window.alert("Please choose a preferred collection date before getting a price.");
+      }
+      if (el.errorSection && el.errorMessage) {
+        el.errorSection.hidden = false;
+        el.errorMessage.textContent = "Please select a preferred collection date.";
+      }
+      return;
+    }
     const apiKey = window.__newFormApiKey;
     if (!apiKey) {
       setApiError("Google Maps is not configured. Please set GOOGLE_MAPS_API_KEY on the server.");
@@ -483,7 +532,7 @@
     syncHidden();
   }
 
-  function addItem(name) {
+  function addItem(name, isCustom) {
     const clean = normalizeName(name);
     if (!clean) return;
 
@@ -491,21 +540,24 @@
     if (existingIdx >= 0) {
       // If already exists, just increment qty
       items[existingIdx].qty = (items[existingIdx].qty || 1) + 1;
+      if (isCustom) {
+        items[existingIdx].isCustom = true;
+      }
     } else {
-      items.push({ name: clean, qty: 1 });
+      items.push({ name: clean, qty: 1, isCustom: !!isCustom });
     }
     itemsError.style.display = "none";
     render();
   }
 
   addSelectedBtn?.addEventListener("click", () => {
-    addItem(itemSelect.value);
+    addItem(itemSelect.value, false);
     // Optional: reset select
     itemSelect.selectedIndex = 0;
   });
 
   addCustomBtn?.addEventListener("click", () => {
-    addItem(customInput.value);
+    addItem(customInput.value, true);
     customInput.value = "";
     customInput.focus();
   });

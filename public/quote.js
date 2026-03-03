@@ -12,6 +12,9 @@
 
   const state = { [PICKUP]: null, [DROPOFF]: null };
   let lastQuoteResult = null; // { payload, result } when /api/price succeeds
+  let lastItemsSnapshot = null; // JSON stringified items at time of last valid price
+  let lastPriceSnapshot = null; // snapshot of all pricing-affecting fields when Get price succeeded
+  let hasValidPriceSnapshot = false;
 
   const el = {
     form: document.getElementById("pricingForm"),
@@ -78,9 +81,88 @@
     });
   }
 
+  function getCurrentItemsSnapshot() {
+    const itemsListEl = document.getElementById("itemsList");
+    if (!itemsListEl || !itemsListEl.value) return "[]";
+    return itemsListEl.value;
+  }
+
+  function itemsMatchLastSnapshot() {
+    if (!lastQuoteResult || !lastItemsSnapshot) return false;
+    return getCurrentItemsSnapshot() === lastItemsSnapshot;
+  }
+
+  /** Build a snapshot of all fields that affect pricing (for invalidation when they change). */
+  function buildSnapshotFromForm() {
+    const pickup = state[PICKUP];
+    const dropoff = state[DROPOFF];
+    const helpersEl = el.form ? el.form.querySelector('[name="helpers"]') : null;
+    const helpers = parseInt(helpersEl ? helpersEl.value : "0", 10) || 0;
+    const stairsPickup = (el.form ? el.form.querySelector('[name="stairsPickup"]:checked') : null)?.value || "no";
+    const stairsDropoff = (el.form ? el.form.querySelector('[name="stairsDropoff"]:checked') : null)?.value || "no";
+    const dateEl = el.form ? el.form.querySelector('[name="date"]') : null;
+    const timeWindowEl = el.form ? el.form.querySelector('[name="timeWindow"]') : null;
+    const date = dateEl ? dateEl.value : "";
+    const timeWindow = timeWindowEl ? timeWindowEl.value : "any";
+    return {
+      pickupAddress: (el.pickupInput ? el.pickupInput.value : "").trim(),
+      pickupPostcode: (pickup && pickup.postcode != null) ? String(pickup.postcode).trim() : "",
+      pickupLatLng: (pickup && pickup.lat != null && pickup.lng != null) ? String(pickup.lat) + "," + String(pickup.lng) : "",
+      dropoffAddress: (el.dropoffInput ? el.dropoffInput.value : "").trim(),
+      dropoffPostcode: (dropoff && dropoff.postcode != null) ? String(dropoff.postcode).trim() : "",
+      dropoffLatLng: (dropoff && dropoff.lat != null && dropoff.lng != null) ? String(dropoff.lat) + "," + String(dropoff.lng) : "",
+      stairsPickup,
+      stairsDropoff,
+      helpers,
+      timeWindow,
+      date,
+      itemsSummary: getCurrentItemsSnapshot(),
+    };
+  }
+
+  function snapshotChanged() {
+    if (!lastPriceSnapshot) return false;
+    const current = buildSnapshotFromForm();
+    return (
+      current.pickupAddress !== lastPriceSnapshot.pickupAddress ||
+      current.pickupPostcode !== lastPriceSnapshot.pickupPostcode ||
+      current.pickupLatLng !== lastPriceSnapshot.pickupLatLng ||
+      current.dropoffAddress !== lastPriceSnapshot.dropoffAddress ||
+      current.dropoffPostcode !== lastPriceSnapshot.dropoffPostcode ||
+      current.dropoffLatLng !== lastPriceSnapshot.dropoffLatLng ||
+      current.stairsPickup !== lastPriceSnapshot.stairsPickup ||
+      current.stairsDropoff !== lastPriceSnapshot.stairsDropoff ||
+      current.helpers !== lastPriceSnapshot.helpers ||
+      current.timeWindow !== lastPriceSnapshot.timeWindow ||
+      current.date !== lastPriceSnapshot.date ||
+      current.itemsSummary !== lastPriceSnapshot.itemsSummary
+    );
+  }
+
+  function checkSnapshotAndInvalidate() {
+    if (hasValidPriceSnapshot && snapshotChanged()) {
+      hasValidPriceSnapshot = false;
+      updateContinueButton();
+      if (el.errorSection && el.errorMessage) {
+        el.errorSection.hidden = false;
+        el.errorMessage.textContent = "Address changed — please Get price again.";
+      }
+    }
+  }
+
   function updateContinueButton() {
     if (el.continueBtn) {
-      el.continueBtn.disabled = !lastQuoteResult;
+      const canContinue = !!lastQuoteResult && hasValidPriceSnapshot;
+      el.continueBtn.disabled = !canContinue;
+      if (!canContinue && lastQuoteResult && !hasValidPriceSnapshot) {
+        if (el.errorSection && el.errorMessage) {
+          el.errorMessage.textContent = "Address changed — please Get price again.";
+          el.errorSection.hidden = false;
+        }
+      } else if (canContinue && el.errorSection && el.errorMessage) {
+        el.errorSection.hidden = true;
+        el.errorMessage.textContent = "";
+      }
     }
   }
 
@@ -107,16 +189,51 @@
     return "";
   }
 
+  /** Reverse geocode lat/lng to get postcode when address_components did not include it. */
+  function reverseGeocodeToPostcode(lat, lng, apiKey) {
+    if (!apiKey || lat == null || lng == null) return Promise.resolve("");
+    const latlng = encodeURIComponent(lat + "," + lng);
+    const url = "https://maps.googleapis.com/maps/api/geocode/json?latlng=" + latlng +
+      "&region=gb&key=" + encodeURIComponent(apiKey);
+    return fetch(url)
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        const result = data.results && data.results[0];
+        if (!result || !result.address_components) return "";
+        const components = result.address_components;
+        for (let i = 0; i < components.length; i++) {
+          if ((components[i].types || []).indexOf("postal_code") !== -1) {
+            return (components[i].long_name || "").trim();
+          }
+        }
+        return "";
+      })
+      .catch(function () { return ""; });
+  }
+
   function onPlaceSelected(which, place) {
     if (!place || !place.geometry || !place.geometry.location) return;
     const lat = place.geometry.location.lat();
     const lng = place.geometry.location.lng();
     const formattedAddress = place.formatted_address || "";
-    const postcode = getPostcodeFromPlace(place);
     const placeId = place.place_id || null;
+    let postcode = getPostcodeFromPlace(place);
     state[which] = { formattedAddress, postcode: postcode || "", lat, lng, placeId };
     fillHiddenFields(which, state[which]);
     showError(which, "");
+    if (!postcode && lat != null && lng != null) {
+      const apiKey = window.__quoteApiKey;
+      if (apiKey) {
+        reverseGeocodeToPostcode(lat, lng, apiKey).then(function (pc) {
+          if (pc && state[which] && state[which].lat === lat && state[which].lng === lng) {
+            state[which].postcode = pc;
+            fillHiddenFields(which, state[which]);
+            checkSnapshotAndInvalidate();
+            updateContinueButton();
+          }
+        });
+      }
+    }
   }
 
   function geocodeAddress(address, apikey) {
@@ -281,7 +398,26 @@
     e.preventDefault();
     clearErrors();
     lastQuoteResult = null;
+    lastItemsSnapshot = null;
+    lastPriceSnapshot = null;
+    hasValidPriceSnapshot = false;
     updateContinueButton();
+
+    const dateEl = el.form ? el.form.querySelector('[name="date"]') : null;
+    const dateValue = dateEl ? dateEl.value : "";
+    if (!dateValue) {
+      if (dateEl && typeof dateEl.focus === "function") {
+        dateEl.focus();
+      }
+      if (typeof window !== "undefined" && typeof window.alert === "function") {
+        window.alert("Please choose a preferred collection date before getting a price.");
+      }
+      if (el.errorSection && el.errorMessage) {
+        el.errorSection.hidden = false;
+        el.errorMessage.textContent = "Please select a preferred collection date.";
+      }
+      return;
+    }
 
     const apiKey = window.__quoteApiKey;
     if (!apiKey) {
@@ -329,7 +465,16 @@
           setLoading(false);
           if (_ref.ok) {
             lastQuoteResult = { payload, result: _ref.body };
+            try {
+              lastItemsSnapshot = JSON.stringify(payload.items || []);
+            } catch (_) {
+              lastItemsSnapshot = getCurrentItemsSnapshot();
+            }
+            lastPriceSnapshot = buildSnapshotFromForm();
+            hasValidPriceSnapshot = true;
             setResult(renderResult(_ref.body));
+            if (el.errorSection) el.errorSection.hidden = true;
+            if (el.errorMessage) el.errorMessage.textContent = "";
             updateContinueButton();
             if (el.resultSection) el.resultSection.scrollIntoView({ behavior: "smooth", block: "nearest" });
           } else {
@@ -363,6 +508,41 @@
   if (el.continueBtn) {
     el.continueBtn.addEventListener("click", onContinue);
   }
+
+  window.__quoteOnItemsChanged = function () {
+    lastItemsSnapshot = null;
+    checkSnapshotAndInvalidate();
+    updateContinueButton();
+  };
+
+  function addSnapshotChangeListeners() {
+    function onSnapshotFieldChange() {
+      checkSnapshotAndInvalidate();
+    }
+    if (el.pickupInput) {
+      el.pickupInput.addEventListener("input", onSnapshotFieldChange);
+      el.pickupInput.addEventListener("change", onSnapshotFieldChange);
+    }
+    if (el.dropoffInput) {
+      el.dropoffInput.addEventListener("input", onSnapshotFieldChange);
+      el.dropoffInput.addEventListener("change", onSnapshotFieldChange);
+    }
+    const dateEl = el.form ? el.form.querySelector('[name="date"]') : null;
+    const timeWindowEl = el.form ? el.form.querySelector('[name="timeWindow"]') : null;
+    const helpersEl = el.form ? el.form.querySelector('[name="helpers"]') : null;
+    const stairsPickupEls = el.form ? el.form.querySelectorAll('[name="stairsPickup"]') : [];
+    const stairsDropoffEls = el.form ? el.form.querySelectorAll('[name="stairsDropoff"]') : [];
+    if (dateEl) dateEl.addEventListener("change", onSnapshotFieldChange);
+    if (timeWindowEl) timeWindowEl.addEventListener("change", onSnapshotFieldChange);
+    if (helpersEl) helpersEl.addEventListener("change", onSnapshotFieldChange);
+    stairsPickupEls.forEach(function (radio) {
+      radio.addEventListener("change", onSnapshotFieldChange);
+    });
+    stairsDropoffEls.forEach(function (radio) {
+      radio.addEventListener("change", onSnapshotFieldChange);
+    });
+  }
+  addSnapshotChangeListeners();
 
   fetch("/api/maps-config")
     .then(function (res) { return parseJsonResponse(res).then(function (p) { return { ok: p.ok, data: p.body }; }); })
@@ -430,6 +610,9 @@
         const v = parseInt(qty.value, 10);
         items[idx].qty = Number.isFinite(v) && v > 0 ? v : 1;
         syncHidden();
+        if (typeof window !== "undefined" && typeof window.__quoteOnItemsChanged === "function") {
+          window.__quoteOnItemsChanged();
+        }
       });
 
       const removeBtn = document.createElement("button");
@@ -439,6 +622,9 @@
         items.splice(idx, 1);
         syncHidden();
         render();
+        if (typeof window !== "undefined" && typeof window.__quoteOnItemsChanged === "function") {
+          window.__quoteOnItemsChanged();
+        }
       });
 
       row.appendChild(label);
@@ -449,26 +635,32 @@
     syncHidden();
   }
 
-  function addItem(name) {
+  function addItem(name, isCustom) {
     const clean = normalizeName(name);
     if (!clean) return;
     const existingIdx = findIndexByName(clean);
     if (existingIdx >= 0) {
       items[existingIdx].qty = (items[existingIdx].qty || 1) + 1;
+      if (isCustom) {
+        items[existingIdx].isCustom = true;
+      }
     } else {
-      items.push({ name: clean, qty: 1 });
+      items.push({ name: clean, qty: 1, isCustom: !!isCustom });
     }
     if (itemsError) itemsError.style.display = "none";
     render();
+    if (typeof window !== "undefined" && typeof window.__quoteOnItemsChanged === "function") {
+      window.__quoteOnItemsChanged();
+    }
   }
 
   addSelectedBtn?.addEventListener("click", () => {
-    addItem(itemSelect.value);
+    addItem(itemSelect.value, false);
     if (itemSelect) itemSelect.selectedIndex = 0;
   });
 
   addCustomBtn?.addEventListener("click", () => {
-    addItem(customInput.value);
+    addItem(customInput.value, true);
     if (customInput) { customInput.value = ""; customInput.focus(); }
   });
 
