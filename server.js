@@ -1016,7 +1016,7 @@ app.post("/api/create-checkout-session", handleCheckout);
 // ------------------------------
 
 app.get("/api/maps-config", (req, res) => {
-  const apiKey = process.env.GOOGLE_MAPS_SERVER_KEY;
+  const apiKey = process.env.GOOGLE_MAPS_BROWSER_KEY;
   if (!apiKey) {
     return res
       .status(500)
