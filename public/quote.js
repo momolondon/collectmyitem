@@ -577,6 +577,35 @@
     return String(s || "").trim().replace(/\s+/g, " ");
   }
 
+  // Parse custom item text into { name, qty }.
+  // Supports:
+  // - "20 bench"  -> name "bench", qty 20
+  // - "bench x 20" or "bench X20" -> name "bench", qty 20
+  // Otherwise falls back to qty=1 and the raw name.
+  function parseNameAndQty(rawName, isCustom) {
+    let name = normalizeName(rawName);
+    let qty = 1;
+
+    if (isCustom) {
+      let m = name.match(/^(\d+)\s+(.+)$/);
+      if (m) {
+        qty = parseInt(m[1], 10) || 1;
+        name = m[2];
+      } else {
+        m = name.match(/^(.+?)\s*[xX]\s*(\d+)\s*$/);
+        if (m) {
+          name = m[1];
+          qty = parseInt(m[2], 10) || 1;
+        }
+      }
+      name = normalizeName(name);
+    }
+
+    if (!name) return null;
+    if (!Number.isFinite(qty) || qty <= 0) qty = 1;
+    return { name, qty };
+  }
+
   function findIndexByName(name) {
     const n = name.toLowerCase();
     return items.findIndex(i => i.name.toLowerCase() === n);
@@ -636,16 +665,18 @@
   }
 
   function addItem(name, isCustom) {
-    const clean = normalizeName(name);
-    if (!clean) return;
+    const parsed = parseNameAndQty(name, isCustom);
+    if (!parsed) return;
+    const clean = parsed.name;
+    const qtyToAdd = parsed.qty || 1;
     const existingIdx = findIndexByName(clean);
     if (existingIdx >= 0) {
-      items[existingIdx].qty = (items[existingIdx].qty || 1) + 1;
+      items[existingIdx].qty = (items[existingIdx].qty || 1) + qtyToAdd;
       if (isCustom) {
         items[existingIdx].isCustom = true;
       }
     } else {
-      items.push({ name: clean, qty: 1, isCustom: !!isCustom });
+      items.push({ name: clean, qty: qtyToAdd, isCustom: !!isCustom });
     }
     if (itemsError) itemsError.style.display = "none";
     render();

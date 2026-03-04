@@ -248,6 +248,33 @@ body {
   background: var(--color-primary-hover);
 }
 
+/* Item selection buttons (Add item / Add custom item) */
+#addSelectedItemBtn,
+#addCustomItemBtn {
+  padding: 0.55rem 1.1rem;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  border-radius: var(--radius);
+  border: none;
+  cursor: pointer;
+  background: var(--color-primary);
+  color: #fff;
+  white-space: nowrap;
+}
+
+#addSelectedItemBtn:hover,
+#addCustomItemBtn:hover {
+  background: var(--color-primary-hover);
+}
+
+@media (max-width: 600px) {
+  #addSelectedItemBtn,
+  #addCustomItemBtn {
+    flex: 1 1 100%;
+    text-align: center;
+  }
+}
+
 /* Result */
 .result {
   background: var(--color-surface);
