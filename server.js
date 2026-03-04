@@ -2,12 +2,49 @@ const express = require("express");
 const cors = require("cors");
 const fs = require("fs");
 const path = require("path");
+const nodemailer = require("nodemailer");
 // Load .env from project root (next to server.js) regardless of cwd
 require("dotenv").config({ path: path.join(__dirname, ".env") });
 
 const Stripe = require("stripe");
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 const { handleCheckoutSessionCompleted } = require("./webhook");
+
+// SMTP transporter (optional: only created when env vars are set)
+const smtpHost = (process.env.SMTP_HOST || "").trim();
+const smtpPort = parseInt(process.env.SMTP_PORT, 10) || 587;
+const smtpUser = (process.env.SMTP_USER || "").trim();
+const smtpPass = (process.env.SMTP_PASS || "").trim();
+const mailTransporter =
+  smtpHost && smtpUser && smtpPass
+    ? nodemailer.createTransport({
+        host: smtpHost,
+        port: Number.isFinite(smtpPort) ? smtpPort : 587,
+        secure: smtpPort === 465,
+        auth: { user: smtpUser, pass: smtpPass },
+      })
+    : null;
+
+/**
+ * Send an admin notification email using the SMTP transporter.
+ * @param {object} details - { to?, subject, text?, html? } (to defaults to ADMIN_EMAIL)
+ * @returns {Promise<void>}
+ */
+async function sendAdminNotification(details) {
+  if (!mailTransporter || !details) return;
+  const to = (details.to || process.env.ADMIN_EMAIL || "").trim();
+  if (!to) return;
+  const subject = details.subject || "Admin notification";
+  const text = details.text || "";
+  const html = details.html || (text ? undefined : undefined);
+  await mailTransporter.sendMail({
+    from: smtpUser,
+    to,
+    subject,
+    text: text || undefined,
+    html: html || undefined,
+  });
+}
 
 const app = express();
 const PORT = process.env.PORT || 4242;
@@ -194,6 +231,18 @@ app.post("/webhook", express.raw({ type: "application/json" }), (req, res) => {
     booking.depositPaidAt = new Date().toISOString();
     writeBookings(bookings);
     console.log("[booking marked paid] bookingRef=" + ref);
+
+    // Admin notification: new booking paid
+    sendAdminNotification({
+      subject: "New CollectMyItem Booking",
+      text: `A new booking has been paid.
+
+Customer email: ${session.customer_details?.email ?? "—"}
+Amount paid: £${(session.amount_total ?? 0) / 100}
+Stripe session: ${session.id}`,
+    }).catch((err) => {
+      console.error("Admin notification email error:", err);
+    });
 
     // Send admin notification + customer confirmation emails (after payment confirmed)
     handleCheckoutSessionCompleted(session, booking).catch((err) => {
