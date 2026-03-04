@@ -32,7 +32,7 @@ const mailTransporter =
  */
 async function sendAdminNotification(details) {
   if (!mailTransporter || !details) return;
-  const to = (details.to || process.env.ADMIN_EMAIL || "").trim();
+  const to = (details.to || process.env.ADMIN_EMAIL || "info@collectmyitem.co.uk").trim();
   if (!to) return;
   const subject = details.subject || "Admin notification";
   const text = details.text || "";
@@ -232,14 +232,26 @@ app.post("/webhook", express.raw({ type: "application/json" }), (req, res) => {
     writeBookings(bookings);
     console.log("[booking marked paid] bookingRef=" + ref);
 
-    // Admin notification: new booking paid
+    // Admin notification: new booking paid (only include fields that exist on booking)
+    const lines = ["A new booking has been paid.", ""];
+    if (booking.bookingRef) lines.push("Booking Ref: " + booking.bookingRef);
+    if (booking.customerName) lines.push("Name: " + booking.customerName);
+    if (booking.customerPhone) lines.push("Phone: " + booking.customerPhone);
+    if (booking.customerEmail) lines.push("Email: " + booking.customerEmail);
+    if (booking.pickupAddress) lines.push("Pickup: " + booking.pickupAddress);
+    if (booking.dropoffAddress) lines.push("Dropoff: " + booking.dropoffAddress);
+    if (booking.customerNote) lines.push("Notes: " + booking.customerNote);
+    if (Array.isArray(booking.items) && booking.items.length) {
+      lines.push("Items: " + booking.items.map((i) => (i.name || "item") + " x" + (i.qty || 1)).join(", "));
+    }
+    if (booking.itemsList) lines.push("Items list: " + (typeof booking.itemsList === "string" ? booking.itemsList : JSON.stringify(booking.itemsList)));
+    if (booking.customerPrice != null) lines.push("Total: £" + Number(booking.customerPrice));
+    lines.push("Amount paid (deposit): £" + (session.amount_total ?? 0) / 100);
+    lines.push("", "Stripe session: " + session.id);
+
     sendAdminNotification({
       subject: "New CollectMyItem Booking",
-      text: `A new booking has been paid.
-
-Customer email: ${session.customer_details?.email ?? "—"}
-Amount paid: £${(session.amount_total ?? 0) / 100}
-Stripe session: ${session.id}`,
+      text: lines.join("\n"),
     }).catch((err) => {
       console.error("Admin notification email error:", err);
     });
