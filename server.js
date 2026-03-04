@@ -32,11 +32,14 @@ const MIN_TOTAL = 60; // Never allow total below £60
 
 // Bulky items: sofa, corner sofa, armchair, dining table, bed frame, mattress, wardrobe,
 // chest of drawers, desk, tv stand, fridge, freezer, washing machine, tumble dryer,
-// dishwasher, oven, TV, plus any custom items from the quote form
+// dishwasher, oven, microwave, vacuum cleaner, sound system, TV,
+// plus any custom items from the quote form
 const BULKY_ITEM_TERMS = [
-  "corner sofa", "sofa", "armchair", "dining table", "bed frame", "mattress", "wardrobe",
-  "chest of drawers", "desk", "tv stand", "fridge", "freezer", "washing machine",
-  "tumble dryer", "dishwasher", "oven", "tv",
+  "corner sofa", "sofa", "armchair", "dining table", "dining chairs",
+  "bed frame", "mattress", "wardrobe", "chest of drawers", "desk", "tv stand",
+  "coffee table", "bookshelf", "bedside table",
+  "fridge", "freezer", "washing machine", "tumble dryer",
+  "dishwasher", "oven", "microwave", "vacuum cleaner", "sound system", "tv",
 ];
 
 function countBulkyUnits(items) {
@@ -63,7 +66,18 @@ function calcBulkyCharge(bulkyUnits) {
 const BOX_FREE_LIMIT = 5;
 const BOX_EXTRA_FEE = 5; // £ per box above limit
 
-const BOX_ITEM_TERMS = ["box", "boxes", "carton"];
+const BOX_ITEM_TERMS = [
+  "box",
+  "boxes",
+  "carton",
+  "suitcase",
+  "suitcases",
+  "bicycle",
+  "bycicle",
+  "bike",
+  "bag",
+  "bags",
+];
 
 function countBoxUnits(items) {
   if (!Array.isArray(items)) return 0;
@@ -79,6 +93,28 @@ function countBoxUnits(items) {
 
 function calcBoxesFee(boxUnits) {
   return boxUnits <= BOX_FREE_LIMIT ? 0 : (boxUnits - BOX_FREE_LIMIT) * BOX_EXTRA_FEE;
+}
+
+// Bag charge: first 5 free, then £5 per extra bag
+const BAG_FREE_LIMIT = 5;
+const BAG_EXTRA_FEE = 5; // £ per bag above limit
+
+const BAG_ITEM_TERMS = ["bag", "bags"];
+
+function countBagUnits(items) {
+  if (!Array.isArray(items)) return 0;
+  let units = 0;
+  for (const item of items) {
+    const name = String(item?.name || "").toLowerCase();
+    const qty = Math.max(0, parseInt(item?.qty, 10) || 1);
+    const isBag = BAG_ITEM_TERMS.some((term) => name.includes(term));
+    if (isBag) units += qty;
+  }
+  return units;
+}
+
+function calcBagsFee(bagUnits) {
+  return bagUnits <= BAG_FREE_LIMIT ? 0 : (bagUnits - BAG_FREE_LIMIT) * BAG_EXTRA_FEE;
 }
 
 /** Resolve items array from body.items or body.itemsList (server recomputes, does not trust client) */
@@ -601,7 +637,17 @@ async function calculatePricing(rawBody) {
   const boxUnits = countBoxUnits(items);
   const boxesFee = calcBoxesFee(boxUnits);
 
-  let total = BASE_FEE + distanceCharge + congestionFee + helperFee + bulkyCharge + boxesFee;
+  const bagUnits = countBagUnits(items);
+  const bagsFee = calcBagsFee(bagUnits);
+
+  let total =
+    BASE_FEE +
+    distanceCharge +
+    congestionFee +
+    helperFee +
+    bulkyCharge +
+    boxesFee +
+    bagsFee;
   if (!Number.isFinite(total)) {
     throw new Error("Calculated total is invalid.");
   }
@@ -623,6 +669,7 @@ async function calculatePricing(rawBody) {
     `Helper: £${helperFee.toFixed(0)}`,
     bulkyCharge > 0 ? `Bulky items (${bulkyUnits}): £${bulkyCharge.toFixed(0)}` : null,
     boxesFee > 0 ? `Boxes extra: £${boxesFee.toFixed(0)}` : null,
+    bagsFee > 0 ? `Bags extra: £${bagsFee.toFixed(0)}` : null,
     `Final total price: £${total.toFixed(0)}`,
   ].filter(Boolean);
 
@@ -636,6 +683,7 @@ async function calculatePricing(rawBody) {
     distanceCharge: Math.round(distanceCharge),
     base: BASE_FEE,
     boxesFee,
+    bagsFee,
     bulkyFee: bulkyCharge,
     perMile: PER_MILE_RATE,
     congestionApplied,
@@ -766,7 +814,18 @@ async function calculatePricingNew(body) {
   const boxUnits = countBoxUnits(items);
   const boxesFee = calcBoxesFee(boxUnits);
 
-  let total = BASE_FEE + distanceCharge + congestionFee + helperFee + stairsTotal + bulkyCharge + boxesFee;
+  const bagUnits = countBagUnits(items);
+  const bagsFee = calcBagsFee(bagUnits);
+
+  let total =
+    BASE_FEE +
+    distanceCharge +
+    congestionFee +
+    helperFee +
+    stairsTotal +
+    bulkyCharge +
+    boxesFee +
+    bagsFee;
   if (!Number.isFinite(total)) {
     throw new Error("Calculated total is invalid.");
   }
@@ -789,6 +848,7 @@ async function calculatePricingNew(body) {
     stairsDropoffFee > 0 ? `Stairs dropoff: £${stairsDropoffFee.toFixed(0)}` : null,
     bulkyCharge > 0 ? `Bulky items (${bulkyUnits}): £${bulkyCharge.toFixed(0)}` : null,
     boxesFee > 0 ? `Boxes extra: £${boxesFee.toFixed(0)}` : null,
+    bagsFee > 0 ? `Bags extra: £${bagsFee.toFixed(0)}` : null,
     `Final total price: £${total.toFixed(0)}`,
   ].filter(Boolean);
 
@@ -802,6 +862,7 @@ async function calculatePricingNew(body) {
     distanceCharge: Math.round(distanceCharge),
     baseFee: BASE_FEE,
     boxesFee,
+    bagsFee,
     bulkyFee: bulkyCharge,
     perMile: PER_MILE_RATE,
     congestionApplied,
@@ -992,6 +1053,7 @@ async function handleCheckout(req, res) {
       stairsDropoffFee: pricing.stairsDropoffFee,
       bulkyFee: pricing.bulkyFee ?? pricing.bulkyCharge,
       boxesFee: pricing.boxesFee,
+      bagsFee: pricing.bagsFee,
       status: "pending_payment",
     });
 
