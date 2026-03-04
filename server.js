@@ -6,6 +6,7 @@ const path = require("path");
 require("dotenv").config({ path: path.join(__dirname, ".env") });
 
 const Stripe = require("stripe");
+console.log("Stripe key loaded?", Boolean(process.env.STRIPE_SECRET_KEY));
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 const { handleCheckoutSessionCompleted } = require("./webhook");
 
