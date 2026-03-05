@@ -110,7 +110,7 @@ const BOX_ITEM_TERMS = [
   "suitcase",
   "suitcases",
   "bicycle",
-  "bycicle",
+  "bicycles",
   "bike",
   "bag",
   "bags",
