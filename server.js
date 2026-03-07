@@ -505,6 +505,27 @@ function isCongestionZone(postcode) {
 }
 
 /**
+ * Service area: London, Greater London, Kent, Surrey, Essex & Hertfordshire.
+ * Postcode area prefixes (first 1–2 letters before the digit).
+ */
+const SERVICE_AREA_POSTCODE_AREAS = [
+  "E", "EC", "WC", "W", "NW", "N", "SW", "SE", "BR",  // London & Greater London
+  "CT", "DA", "ME", "TN",                             // Kent
+  "GU", "KT", "RH", "SM", "CR", "TW",                 // Surrey
+  "CM", "CO", "IG", "RM", "SS",                       // Essex
+  "AL", "EN", "HP", "SG", "WD",                       // Hertfordshire
+];
+
+/** Returns true if the postcode is within the service area (London, Greater London, Kent, Surrey, Essex, Hertfordshire). */
+function isInServiceArea(postcode) {
+  const s = cleanPostcode(postcode);
+  if (!s) return false;
+  const match = s.match(/^([A-Z]{1,2})/);
+  const area = match ? match[1] : "";
+  return SERVICE_AREA_POSTCODE_AREAS.includes(area);
+}
+
+/**
  * Build a representative Date for congestion charging from date (YYYY-MM-DD) and timeWindow.
  * Returns null if no date, so caller should not apply congestion charge.
  */
@@ -642,6 +663,9 @@ async function calculatePricing(rawBody) {
   }
   if (!isValidPostcode(pickup) || !isValidPostcode(dropoff)) {
     throw new Error("Please enter valid UK postcodes for pickup and delivery.");
+  }
+  if (!isInServiceArea(pickup) || !isInServiceArea(dropoff)) {
+    throw new Error("We currently only serve London, Greater London, Kent, Surrey, Essex and Hertfordshire. Your address is outside our service area.");
   }
 
   // Service type is currently not used to change pricing, but we validate it for backwards compatibility.
@@ -850,6 +874,10 @@ async function calculatePricingNew(body) {
     dropoffPostcode = await reverseGeocodeToPostcode(lat2, lng2);
   }
 
+  if (!pickupPostcode || !dropoffPostcode || !isInServiceArea(pickupPostcode) || !isInServiceArea(dropoffPostcode)) {
+    throw new Error("We currently only serve London, Greater London, Kent, Surrey, Essex and Hertfordshire. Your address is outside our service area.");
+  }
+
   // Congestion: apply when pickup OR dropoff is inside congestion zone (using postcode from payload or reverse-geocoded)
   const congestionApplied =
     (pickupPostcode && isCongestionZone(pickupPostcode)) ||
@@ -997,6 +1025,11 @@ async function handleCheckout(req, res) {
       return res
         .status(400)
         .json({ error: "Please enter valid UK postcodes for pickup and delivery." });
+    }
+    if (!isInServiceArea(pickupPostcode) || !isInServiceArea(dropoffPostcode)) {
+      return res
+        .status(400)
+        .json({ error: "We currently only serve London, Greater London, Kent, Surrey, Essex and Hertfordshire. Your address is outside our service area." });
     }
 
     if (!isNewFlow && body.serviceType && !["man_van", "house_removal"].includes(body.serviceType)) {
